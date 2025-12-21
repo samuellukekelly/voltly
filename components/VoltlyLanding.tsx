@@ -176,7 +176,9 @@ export default function VoltlyLanding() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  
+  const [supabaseMsg, setSupabaseMsg] = useState<string | null>(null);
+const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
@@ -195,11 +197,18 @@ useEffect(() => {
   let cancelled = false;
 
   async function loadProvidersAndRates() {
+    const sb = supabase;
+    if (!sb) {
+      setProvidersLoading(false);
+      setProvidersError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel → Project Settings → Environment Variables.");
+      return;
+    }
+
     setProvidersLoading(true);
     setProvidersError(null);
 
     try {
-      const { data: provData, error: provErr } = await supabase
+      const { data: provData, error: provErr } = await sb
         .from("providers")
         .select("id, provider_id, provider_code, provider_name")
         .order("provider_name", { ascending: true });
@@ -223,7 +232,7 @@ useEffect(() => {
         .map((p) => p?.[providerIdField])
         .filter((v) => v != null);
 
-      const { data: tariffData, error: tariffErr } = await supabase
+      const { data: tariffData, error: tariffErr } = await sb
         .from("tariffs")
         .select("id, tariff_id, provider_id, tariff_name, tariff_type")
         .in("provider_id", providerIds as any);
@@ -243,7 +252,7 @@ useEffect(() => {
         .map((t) => t?.[tariffIdField])
         .filter((v) => v != null);
 
-      const { data: rateData, error: rateErr } = await supabase
+      const { data: rateData, error: rateErr } = await sb
         .from("tariff_rates")
         .select(
           "tariff_id, region_code, electricity_unit_rate_p_per_kwh, electricity_standing_charge_p_per_day, gas_unit_rate_p_per_kwh, gas_standing_charge_p_per_day"
@@ -626,7 +635,12 @@ useEffect(() => {
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <div className="text-sm font-semibold">Compare against</div>
-                            <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost.</div>
+                            <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost.
+                    {supabaseMsg ? (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                        {supabaseMsg}
+                      </div>
+                    ) : null}</div>
                           </div>
                           {selectedProvider ? (
                             <button className="text-xs font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedProvider(null)}>

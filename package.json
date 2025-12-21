@@ -1,6 +1,6 @@
 {
   "name": "voltly",
-  "version": "0.1.26-supabase.3",
+  "version": "0.1.26-supabase.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
