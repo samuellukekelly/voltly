@@ -338,7 +338,7 @@ useEffect(() => {
     const current = currentAnnualCost(extracted);
     return providers
       .map((p) => {
-        const annual = annualCostGBP(extracted, p);
+        const annual = annualCostGBP(extracted!, p);
         const delta = current != null && annual != null ? annual - current : undefined;
         return { p, annual, delta };
       })
