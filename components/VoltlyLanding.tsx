@@ -292,7 +292,7 @@ useEffect(() => {
               Number(rate?.gas_standing_charge_p_per_day) || undefined,
           };
 
-          const annual = annualCostGBP(extracted, option);
+          const annual = extracted ? annualCostGBP(extracted, option) : Number.POSITIVE_INFINITY;
           if (annual < bestAnnual) {
             bestAnnual = annual;
             best = option;
@@ -303,7 +303,7 @@ useEffect(() => {
       }
 
       bestPerProvider.sort(
-        (a, b) => annualCostGBP(extracted, a) - annualCostGBP(extracted, b)
+        (a, b) => (extracted ? annualCostGBP(extracted, a) : 0) - (extracted ? annualCostGBP(extracted, b) : 0)
       );
 
       if (!cancelled) setProviders(bestPerProvider);
@@ -706,7 +706,7 @@ useEffect(() => {
                           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-600">Select a supplier to see the comparison here.</div>
                         ) : (
                           (() => {
-                            const other = annualCostGBP(extracted, selectedProvider);
+                            const other = annualCostGBP(extracted!, selectedProvider);
                             const delta = currentAnnual != null && other != null ? other - currentAnnual : undefined;
                             const d = deltaLabel(delta);
                             const cheaper = d.kind === "good";
