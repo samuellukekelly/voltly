@@ -2,14 +2,17 @@
 
 Fully web-based bill upload + extraction MVP (Next.js + Tailwind), built to deploy on **Vercel**.
 
-## Deploy (no local server required)
+## Why Vercel blocked your deploy
+Vercel blocks **vulnerable Next.js versions** affected by CVE-2025-66478.  
+Per Vercel’s bulletin, **Next.js 15.0.x must be >= 15.0.5**. citeturn2view0
+
+This repo pins:
+- `next`: **15.0.5**
+- `eslint-config-next`: **15.0.5**
+
+## Deploy
 1. Upload to GitHub
-2. Vercel → New Project → import the repo → Deploy
+2. Vercel → New Project → import → Deploy
 
-### Why your last build failed
-- TypeScript couldn't resolve `pdfjs-dist/legacy/build/pdf` (exports/types issue).
-- This version imports `pdfjs-dist/legacy/build/pdf.mjs` and includes an ambient `types/pdfjs-dist.d.ts`.
-
-### PDF Worker
-Vercel runs `postinstall`, copying PDF.js worker into `/public/pdf.worker.min.mjs`,
-and we point PDF.js to `/pdf.worker.min.mjs` (same-origin).
+## PDF Worker
+`postinstall` copies PDF.js worker into `/public/pdf.worker.min.mjs` and the app points PDF.js to that file.
