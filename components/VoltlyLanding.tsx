@@ -397,7 +397,7 @@ export default function VoltlyLanding() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 overflow-hidden">
               <div className="grid h-full md:grid-cols-[1fr_380px]">
                 {/* LEFT: extracted details */}
                 <div className="min-h-0 overflow-y-auto p-5">
@@ -490,9 +490,8 @@ export default function VoltlyLanding() {
                           {extracted.rawTextSample}
                         </pre>
                       </details>
-          </div>
-        </div>
-      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* RIGHT: compare list + comparison */}
