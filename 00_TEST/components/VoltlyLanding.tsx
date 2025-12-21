@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import React, { useMemo, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
@@ -32,16 +31,6 @@ type Provider = {
   dayP: number;
   nightP: number;
   standingPPerDay: number;
-};
-
-type ProviderOption = Provider & {
-  providerId: string | number;
-  providerCode?: string;
-  tariffId: string | number;
-  tariffName?: string;
-  tariffType?: string;
-  gasUnitRatePPerKwh?: number;
-  gasStandingChargePPerDay?: number;
 };
 
 function clampText(s: string, max = 900) {
@@ -143,16 +132,18 @@ function percent(n?: number) {
   return `${(n * 100).toFixed(0)}%`;
 }
 
-function annualCostGBP(extracted: Extracted, provider: Provider) {
-  const dayKwh = extracted.electricDayKwh ?? 0;
-  const nightKwh = extracted.electricNightKwh ?? 0;
-  const totalKwh =
-    extracted.electricTotalKwh != null ? extracted.electricTotalKwh : dayKwh + nightKwh;
+function annualCostGBP(extracted: Extracted, provider: Provider): number | undefined {
+  const totalKwh = extracted.electricTotalKwh;
+  if (totalKwh == null || totalKwh <= 0) return undefined;
 
-  const unitRateP = provider.dayP;
-  const energyCost = (totalKwh * unitRateP) / 100;
+  // If we have day/night split, use it. Else assume all as day.
+  const dayKwh: number = extracted.electricDayKwh ?? totalKwh;
+  const nightKwh: number = extracted.electricNightKwh ?? 0;
+
+  const dayCost = (dayKwh * provider.dayP) / 100;
+  const nightCost = (nightKwh * provider.nightP) / 100;
   const standing = (provider.standingPPerDay / 100) * 365;
-  return energyCost + standing;
+  return dayCost + nightCost + standing;
 }
 
 function currentAnnualCost(extracted: Extracted): number | undefined {
@@ -181,149 +172,25 @@ export default function VoltlyLanding() {
   const [extracted, setExtracted] = useState<Extracted | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
 
-  const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
-  const [providers, setProviders] = useState<ProviderOption[]>([]);
-const [providersLoading, setProvidersLoading] = useState(false);
-const [providersError, setProvidersError] = useState<string | null>(null);
-
-const regionCode = (extracted?.postcodeAlpha || "M").toUpperCase();
-
-useEffect(() => {
-  if (!extracted) return;
-
-  let cancelled = false;
-
-  async function loadProvidersAndRates() {
-    setProvidersLoading(true);
-    setProvidersError(null);
-
-    try {
-      const { data: provData, error: provErr } = await supabase
-        .from("providers")
-        .select("id, provider_id, provider_code, provider_name")
-        .order("provider_name", { ascending: true });
-
-      if (provErr) throw provErr;
-
-      const providersRaw = (provData ?? []) as any[];
-      if (!providersRaw.length) {
-        if (!cancelled) setProviders([]);
-        return;
-      }
-
-      const providerIdField: "id" | "provider_id" | "provider_code" =
-        providersRaw[0]?.id != null
-          ? "id"
-          : providersRaw[0]?.provider_id != null
-          ? "provider_id"
-          : "provider_code";
-
-      const providerIds = providersRaw
-        .map((p) => p?.[providerIdField])
-        .filter((v) => v != null);
-
-      const { data: tariffData, error: tariffErr } = await supabase
-        .from("tariffs")
-        .select("id, tariff_id, provider_id, tariff_name, tariff_type")
-        .in("provider_id", providerIds as any);
-
-      if (tariffErr) throw tariffErr;
-
-      const tariffsRaw = (tariffData ?? []) as any[];
-      if (!tariffsRaw.length) {
-        if (!cancelled) setProviders([]);
-        return;
-      }
-
-      const tariffIdField: "id" | "tariff_id" =
-        tariffsRaw[0]?.id != null ? "id" : "tariff_id";
-
-      const tariffIds = tariffsRaw
-        .map((t) => t?.[tariffIdField])
-        .filter((v) => v != null);
-
-      const { data: rateData, error: rateErr } = await supabase
-        .from("tariff_rates")
-        .select(
-          "tariff_id, region_code, electricity_unit_rate_p_per_kwh, electricity_standing_charge_p_per_day, gas_unit_rate_p_per_kwh, gas_standing_charge_p_per_day"
-        )
-        .eq("region_code", regionCode)
-        .in("tariff_id", tariffIds as any);
-
-      if (rateErr) throw rateErr;
-
-      const ratesRaw = (rateData ?? []) as any[];
-      const rateByTariff = new Map<any, any>();
-      for (const r of ratesRaw) rateByTariff.set(r?.tariff_id, r);
-
-      const bestPerProvider: ProviderOption[] = [];
-
-      for (const p of providersRaw) {
-        const pid = p?.[providerIdField];
-        const providerName = p?.provider_name ?? "Unknown provider";
-
-        const providerTariffs = tariffsRaw.filter((t) => t?.provider_id === pid);
-
-        let best: ProviderOption | null = null;
-        let bestAnnual = Number.POSITIVE_INFINITY;
-
-        for (const t of providerTariffs) {
-          const tid = t?.[tariffIdField];
-          const rate = rateByTariff.get(tid);
-          if (!rate) continue;
-
-          const unitP = Number(rate?.electricity_unit_rate_p_per_kwh);
-          const standingP = Number(rate?.electricity_standing_charge_p_per_day);
-          if (!Number.isFinite(unitP) || !Number.isFinite(standingP)) continue;
-
-          const option: ProviderOption = {
-            providerId: pid,
-            providerCode: p?.provider_code,
-            tariffId: tid,
-            tariffName: t?.tariff_name,
-            tariffType: t?.tariff_type,
-            name: providerName,
-            dayP: unitP,
-            nightP: unitP,
-            standingPPerDay: standingP,
-            gasUnitRatePPerKwh: Number(rate?.gas_unit_rate_p_per_kwh) || undefined,
-            gasStandingChargePPerDay:
-              Number(rate?.gas_standing_charge_p_per_day) || undefined,
-          };
-
-          const annual = annualCostGBP(extracted, option);
-          if (annual < bestAnnual) {
-            bestAnnual = annual;
-            best = option;
-          }
-        }
-
-        if (best) bestPerProvider.push(best);
-      }
-
-      bestPerProvider.sort(
-        (a, b) => annualCostGBP(extracted, a) - annualCostGBP(extracted, b)
-      );
-
-      if (!cancelled) setProviders(bestPerProvider);
-    } catch (e: any) {
-      const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-      if (!cancelled) {
-        setProviders([]);
-        setProvidersError("Could not load suppliers from Supabase. " + msg);
-      }
-    } finally {
-      if (!cancelled) setProvidersLoading(false);
-    }
-  }
-
-  loadProvidersAndRates();
-
-  return () => {
-    cancelled = true;
-  };
-}, [extracted, regionCode]);
+  const providers: Provider[] = useMemo(
+    () => [
+      { name: "Octopus Energy", dayP: 27.1, nightP: 8.0, standingPPerDay: 46.0 },
+      { name: "E.ON Next", dayP: 28.1, nightP: 9.0, standingPPerDay: 48.5 },
+      { name: "EDF Energy", dayP: 28.4, nightP: 9.2, standingPPerDay: 49.0 },
+      { name: "So Energy", dayP: 28.3, nightP: 9.1, standingPPerDay: 49.5 },
+      { name: "OVO", dayP: 28.6, nightP: 9.4, standingPPerDay: 50.5 },
+      { name: "British Gas", dayP: 28.9, nightP: 9.5, standingPPerDay: 50.0 },
+      { name: "Shell Energy", dayP: 28.75, nightP: 9.6, standingPPerDay: 51.0 },
+      { name: "SSE", dayP: 28.95, nightP: 9.65, standingPPerDay: 50.8 },
+      { name: "Good Energy", dayP: 29.1, nightP: 9.9, standingPPerDay: 51.2 },
+      { name: "Scottish Power", dayP: 29.2, nightP: 9.8, standingPPerDay: 51.5 },
+      { name: "Utilita", dayP: 29.5, nightP: 10.1, standingPPerDay: 52.0 },
+      { name: "Utility Warehouse", dayP: 29.3, nightP: 10.0, standingPPerDay: 52.5 },
+    ],
+    []
+  );
 
   const nightShare = useMemo(() => {
     if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
@@ -641,20 +508,7 @@ useEffect(() => {
                           <div className="text-sm text-slate-600">Upload a bill to enable comparisons.</div>
                         ) : (
                           <div className="space-y-2">
-                            {providersLoading ? (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-    Loading suppliers…
-  </div>
-) : providersError ? (
-  <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-    {providersError}
-  </div>
-) : providerQuotes.length === 0 ? (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-    No suppliers found for region {regionCode}.
-  </div>
-) : (
-  providerQuotes.map(({ p, annual, delta }) => {
+                            {providerQuotes.map(({ p, annual, delta }) => {
                               const active = selectedProvider?.name === p.name;
                               const d = deltaLabel(delta);
                               return (
@@ -695,8 +549,7 @@ useEffect(() => {
                                   </div>
                                 </button>
                               );
-                            })
-)}
+                            })}
                           </div>
                         )}
                       </div>
