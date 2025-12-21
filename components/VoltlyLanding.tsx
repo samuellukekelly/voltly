@@ -1,15 +1,13 @@
+\
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
-// Same-origin worker copied to /public at build time
 try {
   // @ts-ignore
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-} catch {
-  // no-op
-}
+} catch {}
 
 type Extracted = {
   supplier?: string;
@@ -44,6 +42,21 @@ type ProviderRate = {
   standingPPerDay: number;
 };
 
+const PROVIDER_NAMES = [
+  "British Gas",
+  "Octopus Energy",
+  "EDF Energy",
+  "E.ON Next",
+  "Scottish Power",
+  "OVO",
+  "Shell Energy",
+  "Utilita",
+  "SSE",
+  "Good Energy",
+  "So Energy",
+  "Utility Warehouse",
+];
+
 function clampText(s: string, max = 1200) {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > max ? t.slice(0, max) + "…" : t;
@@ -60,7 +73,7 @@ function parseFromText(text: string): Extracted {
   const t = text;
 
   const supplier = /Octopus Energy/i.test(t) ? "Octopus Energy" : undefined;
-  if (!supplier) notes.push("Supplier not confidently detected (parser is optimised for Octopus-style bills).");
+  if (!supplier) notes.push("Supplier not confidently detected (parser optimised for Octopus-style bills).");
 
   const accountNumber = (t.match(/Your Account Number:\s*([A-Z0-9-]+)/i) || [])[1];
   const billReference = (t.match(/Bill Reference:\s*([0-9]+)/i) || [])[1];
@@ -75,8 +88,6 @@ function parseFromText(text: string): Extracted {
 
   const postcodeAlpha = (t.match(/Postcode area alpha identifier:\s*([A-Z]+)/i) || [])[1];
 
-  // NOTE: This can sometimes over-capture if the bill text runs on.
-  // In a later iteration, we can constrain with line breaks / anchors.
   const tariffName = (t.match(/Tariff Name\s*([A-Za-z0-9\s-]+)/i) || [])[1]?.trim();
   const paymentMethod = (t.match(/Payment Method\s*([A-Za-z\s-]+)/i) || [])[1]?.trim();
 
@@ -87,7 +98,6 @@ function parseFromText(text: string): Extracted {
     t.match(/Standing Charge\s*[0-9]+\.?[0-9]*p\s*\/\s*day\s*\(£\s*([0-9]+\.?[0-9]*)\s*\/\s*year\)/i)
   );
 
-  // Octopus Go-style table demo regexes
   const nightKwh = numFromMatch(t.match(/8\.10p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const dayKwh = numFromMatch(t.match(/28\.42p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const totalKwh =
@@ -96,8 +106,7 @@ function parseFromText(text: string): Extracted {
 
   const electricTotalGBP = numFromMatch(t.match(/Total Electricity Charges\s*£\s*([0-9]+\.?[0-9]*)/i));
 
-  if (!electricityDayRateP && !electricityNightRateP)
-    notes.push("Could not find electricity unit rates. The bill may be scanned or formatted differently.");
+  if (!electricityDayRateP && !electricityNightRateP) notes.push("Could not find electricity unit rates.");
   if (!electricityStandingPPerDay) notes.push("Could not find electricity standing charge.");
   if (!totalKwh) notes.push("Could not confidently extract total kWh usage.");
 
@@ -161,15 +170,14 @@ function annualCostGBP(ex: Extracted, rate: ProviderRate): number | undefined {
   const totalKwh = ex.electricTotalKwh;
   if (!totalKwh || totalKwh <= 0) return undefined;
 
-  const dayKwh = ex.electricDayKwh ?? (ex.electricNightKwh != null ? Math.max(totalKwh - (ex.electricNightKwh ?? 0), 0) : undefined);
   const nightKwh = ex.electricNightKwh;
+  const dayKwh = ex.electricDayKwh ?? (nightKwh != null ? Math.max(totalKwh - nightKwh, 0) : undefined);
 
   const hasSplit = dayKwh != null && nightKwh != null && rate.nightP != null;
 
-  const unitGBP =
-    hasSplit
-      ? ((dayKwh * (rate.dayP / 100)) + (nightKwh * ((rate.nightP ?? rate.dayP) / 100)))
-      : (totalKwh * (rate.dayP / 100));
+  const unitGBP = hasSplit
+    ? (dayKwh * (rate.dayP / 100)) + (nightKwh * ((rate.nightP ?? rate.dayP) / 100))
+    : totalKwh * (rate.dayP / 100);
 
   const standingGBP = (rate.standingPPerDay / 100) * 365;
 
@@ -183,29 +191,22 @@ export default function VoltlyLanding() {
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
-
   const [selectedProvider, setSelectedProvider] = useState<ProviderRate | null>(null);
-
-  const nightShare = useMemo(() => {
-    if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
-    if (extracted.electricTotalKwh <= 0) return undefined;
-    return extracted.electricNightKwh / extracted.electricTotalKwh;
-  }, [extracted]);
 
   const providers: ProviderRate[] = useMemo(
     () => [
-      { name: "Octopus Energy", dayP: 27.10, nightP: 8.00, standingPPerDay: 46.0 },
-      { name: "British Gas", dayP: 28.90, nightP: 9.50, standingPPerDay: 50.0 },
-      { name: "EDF Energy", dayP: 28.40, nightP: 9.20, standingPPerDay: 49.0 },
       { name: "E.ON Next", dayP: 28.10, nightP: 9.00, standingPPerDay: 48.5 },
-      { name: "Scottish Power", dayP: 29.20, nightP: 9.80, standingPPerDay: 51.5 },
+      { name: "EDF Energy", dayP: 28.40, nightP: 9.20, standingPPerDay: 49.0 },
+      { name: "So Energy", dayP: 28.30, nightP: 9.10, standingPPerDay: 49.5 },
       { name: "OVO", dayP: 28.60, nightP: 9.40, standingPPerDay: 50.5 },
+      { name: "British Gas", dayP: 28.90, nightP: 9.50, standingPPerDay: 50.0 },
       { name: "Shell Energy", dayP: 28.75, nightP: 9.60, standingPPerDay: 51.0 },
-      { name: "Utilita", dayP: 29.50, nightP: 10.10, standingPPerDay: 52.0 },
       { name: "SSE", dayP: 28.95, nightP: 9.65, standingPPerDay: 50.8 },
       { name: "Good Energy", dayP: 29.10, nightP: 9.90, standingPPerDay: 51.2 },
-      { name: "So Energy", dayP: 28.30, nightP: 9.10, standingPPerDay: 49.5 },
+      { name: "Scottish Power", dayP: 29.20, nightP: 9.80, standingPPerDay: 51.5 },
+      { name: "Utilita", dayP: 29.50, nightP: 10.10, standingPPerDay: 52.0 },
       { name: "Utility Warehouse", dayP: 29.30, nightP: 10.00, standingPPerDay: 52.5 },
+      { name: "Octopus Energy", dayP: 27.10, nightP: 8.00, standingPPerDay: 46.0 },
     ],
     []
   );
@@ -215,8 +216,14 @@ export default function VoltlyLanding() {
     return providers
       .map((p) => ({ p, annual: annualCostGBP(extracted, p) }))
       .filter((x) => x.annual != null)
-      .sort((a, b) => (a.annual! - b.annual!));
+      .sort((a, b) => a.annual! - b.annual!);
   }, [providers, extracted]);
+
+  const nightShare = useMemo(() => {
+    if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
+    if (extracted.electricTotalKwh <= 0) return undefined;
+    return extracted.electricNightKwh / extracted.electricTotalKwh;
+  }, [extracted]);
 
   const onPick = () => fileRef.current?.click();
 
@@ -238,9 +245,7 @@ export default function VoltlyLanding() {
         const cleaned = text.replace(/\s+/g, " ").trim();
 
         if (cleaned.length < 200) {
-          setErr(
-            "This PDF looks like a scan (no selectable text). This demo can only extract from text-based PDFs. Add backend OCR for scanned bills."
-          );
+          setErr("This PDF looks like a scan (no selectable text). This demo can only extract from text-based PDFs.");
           return;
         }
 
@@ -248,35 +253,16 @@ export default function VoltlyLanding() {
         setExtracted(parsed);
         setOpen(true);
       } else if (isImage) {
-        setErr("Image upload detected. This demo extracts text from text-based PDFs only. For photos/scans, add backend OCR.");
+        setErr("Image upload detected. This demo extracts from text-based PDFs only (OCR needs a backend).");
       } else {
         setErr("Unsupported file type. Please upload a PDF bill.");
       }
     } catch (e: any) {
-      const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-      setErr("Sorry — I couldn’t read that PDF. Details: " + msg);
+      setErr("Sorry — I couldn’t read that PDF. Details: " + (e?.message ?? "Unknown error"));
     } finally {
       setBusy(false);
     }
   };
-
-  const compareList = useMemo(
-    () => [
-      "British Gas",
-      "Octopus Energy",
-      "EDF Energy",
-      "E.ON Next",
-      "Scottish Power",
-      "OVO",
-      "Shell Energy",
-      "Utilita",
-      "SSE",
-      "Good Energy",
-      "So Energy",
-      "Utility Warehouse",
-    ],
-    []
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-900">
@@ -293,20 +279,9 @@ export default function VoltlyLanding() {
           </div>
         </div>
 
-        <div className="hidden items-center gap-3 sm:flex">
-          <a className="text-sm text-slate-600 hover:text-slate-900" href="#how">
-            How it works
-          </a>
-          <a className="text-sm text-slate-600 hover:text-slate-900" href="#privacy">
-            Privacy
-          </a>
-          <button
-            onClick={onPick}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 active:scale-[0.99]"
-          >
-            Upload bill
-          </button>
-        </div>
+        <button onClick={onPick} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
+          Upload bill
+        </button>
       </header>
 
       <main className="mx-auto max-w-6xl px-6">
@@ -315,23 +290,16 @@ export default function VoltlyLanding() {
             See what your bill would cost on other tariffs — in seconds.
           </h1>
           <p className="mt-4 max-w-2xl text-pretty text-base text-slate-600 sm:text-lg">
-            Upload your gas or electricity bill and Voltly extracts your unit rates, standing charges and usage (including day/night where
-            available). Then we show a side-by-side comparison so you can spot genuine savings.
+            Upload your bill and Voltly extracts your rates + usage. Then compare against other suppliers.
           </p>
 
-          {/* provider marquee */}
           <div className="mt-8 w-full max-w-3xl">
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">We compare against</div>
             <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="relative">
                 <div className="flex w-max animate-marquee gap-3 p-4">
-                  {[...compareList, ...compareList].map((name, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700"
-                      aria-label={name}
-                      title={name}
-                    >
+                  {[...PROVIDER_NAMES, ...PROVIDER_NAMES].map((name, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
                       <span className="grid h-6 w-6 place-items-center rounded-full bg-white shadow-sm">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                           <path d="M13 2L3 14H11L9 22L21 9H13L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
@@ -345,20 +313,11 @@ export default function VoltlyLanding() {
                 <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white to-transparent" />
               </div>
             </div>
-            <div className="mt-2 text-xs text-slate-500">
-              (Logo carousel is text-only in this MVP — swap to official SVG/PNG assets once you have usage rights.)
-            </div>
           </div>
 
           <div className="mt-10 w-full">
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/pdf,image/*"
-                className="hidden"
-                onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-              />
+              <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0] ?? null)} />
 
               <button
                 onClick={onPick}
@@ -367,20 +326,8 @@ export default function VoltlyLanding() {
               >
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-white shadow-sm">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                    <path
-                      d="M12 16V4M12 4L7 9M12 4L17 9"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M4 16V20H20V16"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 16V20H20V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
                 <span>
@@ -391,72 +338,21 @@ export default function VoltlyLanding() {
 
               <div className="mt-4 text-sm text-slate-500">
                 {filename ? (
-                  <span>
-                    Selected: <span className="font-medium text-slate-700">{filename}</span>
-                  </span>
+                  <span>Selected: <span className="font-medium text-slate-700">{filename}</span></span>
                 ) : (
-                  <span>Tip: If your PDF is scanned, you’ll need OCR (backend) — this demo is browser-only.</span>
+                  <span>Tip: Scanned PDFs need OCR (backend).</span>
                 )}
               </div>
 
-              {err && (
-                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{err}</div>
-              )}
-
-              {extracted && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                  <span>
-                    Extracted details ready. <span className="font-medium">Open the popout</span> to review.
-                  </span>
-                  <button
-                    onClick={() => setOpen(true)}
-                    className="rounded-lg bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-600"
-                  >
-                    View extraction
-                  </button>
-                </div>
-              )}
+              {err && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{err}</div>}
             </div>
-          </div>
-        </section>
-
-        <section id="how" className="mx-auto max-w-5xl pb-16">
-          <div className="grid gap-6 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold">1) Upload</div>
-              <div className="mt-2 text-sm text-slate-600">Drop in a PDF bill. We read the tariff section and consumption summary.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold">2) Extract</div>
-              <div className="mt-2 text-sm text-slate-600">We pull unit rates, standing charges, and day/night usage where available.</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold">3) Compare</div>
-              <div className="mt-2 text-sm text-slate-600">Pick a supplier to mirror the same view with their rates.</div>
-            </div>
-          </div>
-        </section>
-
-        <section id="privacy" className="mx-auto max-w-5xl pb-20">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Privacy-first by design</div>
-            <ul className="mt-3 list-disc space-y-2 pl-5">
-              <li>This demo processes text in your browser. No files are uploaded to a server.</li>
-              <li>For production OCR + comparisons, you’d add a backend and auto-delete uploads after a short period.</li>
-            </ul>
           </div>
         </section>
       </main>
 
-      {/* Modal */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
-          <div
-            className={[
-              "w-full rounded-2xl bg-white shadow-xl transition-[max-width] duration-300 overflow-hidden max-h-[90vh]",
-              selectedProvider ? "max-w-6xl" : "max-w-2xl",
-            ].join(" ")}
-          >
+        <div className="fixed inset-0 z-50 bg-black/40 p-4 overflow-y-auto">
+          <div className={["mx-auto w-full rounded-2xl bg-white shadow-xl overflow-hidden max-h-[90vh] flex flex-col", selectedProvider ? "max-w-6xl" : "max-w-2xl"].join(" ")}>
             <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5">
               <div>
                 <div className="text-lg font-semibold">Extracted bill details</div>
@@ -477,43 +373,166 @@ export default function VoltlyLanding() {
               </button>
             </div>
 
-            <div className="overflow-y-auto">
+            <div className="flex-1 overflow-y-auto">
               <div className="grid gap-0 md:grid-cols-[1fr_280px]">
-              {/* Main content (left) */}
-              <div className="p-5">
-                {!extracted ? (
-                  <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Supplier</div>
-                        <div className="mt-1 text-sm font-medium">{extracted.supplier ?? "—"}</div>
+                <div className="p-5">
+                  {!extracted ? (
+                    <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="text-xs font-semibold text-slate-500">Supplier</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.supplier ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="text-xs font-semibold text-slate-500">Tariff</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.tariffName ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="text-xs font-semibold text-slate-500">Billing period</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.period ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="text-xs font-semibold text-slate-500">Region alpha</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.postcodeAlpha ?? "—"}</div>
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Tariff</div>
-                        <div className="mt-1 text-sm font-medium">{extracted.tariffName ?? "—"}</div>
+
+                      <div className="rounded-2xl border border-slate-200 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">Electricity rates</div>
+                            <div className="mt-1 text-xs text-slate-500">Day/Night shown if detected.</div>
+                          </div>
+                          <div className="text-xs text-slate-500">Payment: {extracted.paymentMethod ?? "—"}</div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Day</div>
+                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityDayRateP)}</div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Night</div>
+                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityNightRateP)}</div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Standing</div>
+                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityStandingPPerDay)} / day</div>
+                            <div className="text-xs text-slate-500">{formatGBP(extracted.electricityStandingPerYearGBP)} / year</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Day kWh</div>
+                            <div className="mt-1 text-sm font-medium">{extracted.electricDayKwh ?? "—"}</div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Night kWh</div>
+                            <div className="mt-1 text-sm font-medium">{extracted.electricNightKwh ?? "—"}</div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Total kWh</div>
+                            <div className="mt-1 text-sm font-medium">{extracted.electricTotalKwh ?? "—"}</div>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">Night share</div>
+                            <div className="mt-1 text-sm font-medium">{percent(nightShare)}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                          <div className="text-sm">
+                            <span className="text-slate-500">Electric total (bill): </span>
+                            <span className="font-semibold">{formatGBP(extracted.electricTotalGBP)}</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-slate-500">Est. annual electric: </span>
+                            <span className="font-semibold">{formatGBP(extracted.electricityEstimatedAnnualGBP)}</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-slate-500">Est. annual gas: </span>
+                            <span className="font-semibold">{formatGBP(extracted.gasEstimatedAnnualGBP)}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Billing period</div>
-                        <div className="mt-1 text-sm font-medium">{extracted.period ?? "—"}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-200 p-4">
-                        <div className="text-xs font-semibold text-slate-500">Region alpha</div>
-                        <div className="mt-1 text-sm font-medium">{extracted.postcodeAlpha ?? "—"}</div>
+
+                      <details className="rounded-2xl border border-slate-200 p-4">
+                        <summary className="cursor-pointer text-sm font-semibold">Raw text sample (debug)</summary>
+                        <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+                          {extracted.rawTextSample}
+                        </pre>
+                      </details>
+                    </div>
+                  )}
+                </div>
+
+                <aside className="border-t border-slate-200 p-5 md:border-l md:border-t-0 md:sticky md:top-[76px] md:h-[calc(90vh-76px)] md:overflow-y-auto">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold">Compare against</div>
+                      <div className="mt-1 text-xs text-slate-500">Sorted by estimated annual cost.</div>
+                    </div>
+                    {selectedProvider ? (
+                      <button className="text-xs font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedProvider(null)}>
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {!extracted ? (
+                    <div className="mt-4 text-sm text-slate-600">Upload a bill to enable comparisons.</div>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      {providerQuotes.map(({ p, annual }) => {
+                        const active = selectedProvider?.name === p.name;
+                        return (
+                          <button
+                            key={p.name}
+                            onClick={() => setSelectedProvider(p)}
+                            className={[
+                              "w-full rounded-xl border px-3 py-2 text-left transition",
+                              active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50",
+                            ].join(" ")}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-semibold">{p.name}</div>
+                              <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
+                                {formatGBP(annual)}
+                              </div>
+                            </div>
+                            <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
+                              Day {formatPence(p.dayP)} • Night {formatPence(p.nightP)} • Standing {formatPence(p.standingPPerDay)}/day
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </aside>
+              </div>
+
+              {selectedProvider && extracted && (
+                <div className="border-t border-slate-200 bg-slate-50 p-5">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">Comparison view</div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        Mirroring the extracted screen using mock rates for <span className="font-semibold">{selectedProvider.name}</span>.
                       </div>
                     </div>
+                    <div className="text-sm">
+                      <span className="text-slate-600">Estimated annual cost: </span>
+                      <span className="font-semibold">{formatGBP(annualCostGBP(extracted, selectedProvider))}</span>
+                    </div>
+                  </div>
 
-                    <div className="rounded-2xl border border-slate-200 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold">Electricity rates</div>
-                          <div className="mt-1 text-xs text-slate-500">Day/Night shown if detected.</div>
-                        </div>
-                        <div className="text-xs text-slate-500">Payment: {extracted.paymentMethod ?? "—"}</div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold">Your current rates</div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[11px] font-semibold text-slate-500">Day</div>
                           <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityDayRateP)}</div>
@@ -525,196 +544,39 @@ export default function VoltlyLanding() {
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[11px] font-semibold text-slate-500">Standing</div>
                           <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityStandingPPerDay)} / day</div>
-                          <div className="text-xs text-slate-500">{formatGBP(extracted.electricityStandingPerYearGBP)} / year</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Day kWh</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.electricDayKwh ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Night kWh</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.electricNightKwh ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Total kWh</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.electricTotalKwh ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Night share</div>
-                          <div className="mt-1 text-sm font-medium">{percent(nightShare)}</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-sm">
-                          <span className="text-slate-500">Electric total (bill): </span>
-                          <span className="font-semibold">{formatGBP(extracted.electricTotalGBP)}</span>
-                        </div>
-                        <div className="text-sm">
-                          <span className="text-slate-500">Est. annual electric: </span>
-                          <span className="font-semibold">{formatGBP(extracted.electricityEstimatedAnnualGBP)}</span>
-                        </div>
-                        <div className="text-sm">
-                          <span className="text-slate-500">Est. annual gas: </span>
-                          <span className="font-semibold">{formatGBP(extracted.gasEstimatedAnnualGBP)}</span>
                         </div>
                       </div>
                     </div>
 
-                    {extracted.notes?.length ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                        <div className="font-semibold">Notes</div>
-                        <ul className="mt-2 list-disc space-y-1 pl-5">
-                          {extracted.notes.map((n, i) => (
-                            <li key={i}>{n}</li>
-                          ))}
-                        </ul>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold">{selectedProvider.name} (mock)</div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Day</div>
+                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.dayP)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Night</div>
+                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.nightP)}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Standing</div>
+                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.standingPPerDay)} / day</div>
+                        </div>
                       </div>
-                    ) : null}
-
-                    <details className="rounded-2xl border border-slate-200 p-4">
-                      <summary className="cursor-pointer text-sm font-semibold">Raw text sample (debug)</summary>
-                      <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-                        {extracted.rawTextSample}
-                      </pre>
-                    </details>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Sidebar (right): compare against */}
-              <aside className="border-t border-slate-200 p-5 md:border-l md:border-t-0 md:max-h-[calc(90vh-88px)] md:overflow-y-auto">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold">Compare against</div>
-                    <div className="mt-1 text-xs text-slate-500">Pick a provider. List is sorted by estimated annual cost.</div>
-                  </div>
-                  {selectedProvider ? (
-                    <button
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900"
-                      onClick={() => setSelectedProvider(null)}
-                    >
-                      Clear
+                  <div className="mt-4 flex flex-wrap justify-end gap-3">
+                    <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setSelectedProvider(null)}>
+                      Back to list
                     </button>
-                  ) : null}
-                </div>
-
-                {!extracted ? (
-                  <div className="mt-4 text-sm text-slate-600">Upload a bill to enable comparisons.</div>
-                ) : (
-                  <div className="mt-4 space-y-2">
-                    {providerQuotes.map(({ p, annual }) => {
-                      const active = selectedProvider?.name === p.name;
-                      return (
-                        <button
-                          key={p.name}
-                          onClick={() => setSelectedProvider(p)}
-                          className={[
-                            "w-full rounded-xl border px-3 py-2 text-left transition",
-                            active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50",
-                          ].join(" ")}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-semibold">{p.name}</div>
-                            <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
-                              {formatGBP(annual)}
-                            </div>
-                          </div>
-                          <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
-                            Day {formatPence(p.dayP)} •{" "}
-                            {p.nightP != null ? `Night ${formatPence(p.nightP)} • ` : ""}
-                            Standing {formatPence(p.standingPPerDay)}/day
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </aside>
-            </div>
-
-            {/* Mirrored comparison panel */}
-            {selectedProvider && extracted && (
-              <div className="border-t border-slate-200 bg-slate-50 p-5">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">Comparison view</div>
-                    <div className="mt-1 text-xs text-slate-600">
-                      Mirroring the extracted screen using mock rates for <span className="font-semibold">{selectedProvider.name}</span>.
-                    </div>
-                  </div>
-                  <div className="text-sm">
-                    <span className="text-slate-600">Estimated annual cost: </span>
-                    <span className="font-semibold">{formatGBP(annualCostGBP(extracted, selectedProvider))}</span>
+                    <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={() => alert("Next step: multi-provider table + savings + switch journey.")}>
+                      Compare all
+                    </button>
                   </div>
                 </div>
-
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {/* Left summary */}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-sm font-semibold">Your current bill (extracted)</div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Day</div>
-                        <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityDayRateP)}</div>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Night</div>
-                        <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityNightRateP)}</div>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Standing</div>
-                        <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityStandingPPerDay)} / day</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right mirrored */}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-sm font-semibold">{selectedProvider.name} (mock)</div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Day</div>
-                        <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.dayP)}</div>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Night</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {selectedProvider.nightP != null ? formatPence(selectedProvider.nightP) : "—"}
-                        </div>
-                      </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
-                        <div className="text-[11px] font-semibold text-slate-500">Standing</div>
-                        <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.standingPPerDay)} / day</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 text-xs text-slate-500">
-                      Next step: replace mock rates with live tariff data (or supplier quote API) and show delta/savings.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap justify-end gap-3">
-                  <button
-                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() => setSelectedProvider(null)}
-                  >
-                    Back to list
-                  </button>
-                  <button
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                    onClick={() => alert("Next step: show multi-provider comparison table + switch journey.")}
-                  >
-                    Compare all
-                  </button>
-                </div>
-              </div>
-            )}
-              </div>
+              )}
             </div>
           </div>
         </div>
