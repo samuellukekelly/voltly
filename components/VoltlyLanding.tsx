@@ -571,8 +571,8 @@ export default function VoltlyLanding() {
                             const other = annualCostGBP(extracted, selectedProvider);
                             const delta = current != null && other != null ? other - current : undefined;
                             const d = formatDelta(delta);
-                            const cheaper = d.isCheaper === true;
-                            const more = d.isCheaper === false && delta != null && delta > 0;
+                            const cheaper = d.kind === "good";
+                            const more = d.kind === "bad";
 
                             return (
                               <div className="space-y-3">
