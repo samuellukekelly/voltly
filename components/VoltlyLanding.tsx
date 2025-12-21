@@ -209,8 +209,7 @@ useEffect(() => {
 
     try {
       const { data: provData, error: provErr } = await sb
-        .from("providers")
-        .select("id, provider_id, provider_code, provider_name")
+        .from("providers").select("id, provider_code, provider_name")
         .order("provider_name", { ascending: true });
 
       if (provErr) throw provErr;
