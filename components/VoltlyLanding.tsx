@@ -397,10 +397,10 @@ export default function VoltlyLanding() {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <div className="grid h-full md:grid-cols-[1fr_380px]">
                 {/* LEFT: extracted details */}
-                <div className="min-h-0 p-5 md:overflow-y-auto">
+                <div className="min-h-0 overflow-y-auto p-5">
                   {!extracted ? (
                     <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
                   ) : (
@@ -490,8 +490,9 @@ export default function VoltlyLanding() {
                           {extracted.rawTextSample}
                         </pre>
                       </details>
-                    </div>
-                  )}
+          </div>
+        </div>
+      )}
                 </div>
 
                 {/* RIGHT: compare list + comparison */}
@@ -514,7 +515,7 @@ export default function VoltlyLanding() {
                       </div>
                     </div>
 
-                    <div className="min-h-0 flex-1 p-4 md:overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto p-4">
                       {!extracted ? (
                         <div className="text-sm text-slate-600">Upload a bill to enable comparisons.</div>
                       ) : (
