@@ -183,6 +183,26 @@ function annualCostGBP(ex: Extracted, rate: ProviderRate): number | undefined {
   return unitGBP + standingGBP;
 }
 
+
+function currentAnnualCost(ex: Extracted): number | undefined {
+  const dayP = ex.electricityDayRateP;
+  const standing = ex.electricityStandingPPerDay;
+  if (dayP == null || standing == null) return undefined;
+  return annualCostGBP(ex, {
+    name: "Current",
+    dayP,
+    nightP: ex.electricityNightRateP,
+    standingPPerDay: standing,
+  });
+}
+
+function formatDelta(delta?: number) {
+  if (delta == null || !Number.isFinite(delta)) return { label: "—", kind: "neutral" as const };
+  if (Math.abs(delta) < 0.005) return { label: "Same price", kind: "neutral" as const };
+  if (delta < 0) return { label: `Save £${Math.abs(delta).toFixed(2)}`, kind: "good" as const };
+  return { label: `+£${delta.toFixed(2)}`, kind: "bad" as const };
+}
+
 export default function VoltlyLanding() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -211,12 +231,17 @@ export default function VoltlyLanding() {
   );
 
   const providerQuotes = useMemo(() => {
-    if (!extracted) return [];
-    return providers
-      .map((p) => ({ p, annual: annualCostGBP(extracted, p) }))
-      .filter((x) => x.annual != null)
-      .sort((a, b) => a.annual! - b.annual!);
-  }, [providers, extracted]);
+  if (!extracted) return [];
+  const current = currentAnnualCost(extracted);
+  return providers
+    .map((p) => {
+      const annual = annualCostGBP(extracted, p);
+      const delta = current != null && annual != null ? annual - current : undefined;
+      return { p, annual, delta };
+    })
+    .filter((x) => x.annual != null)
+    .sort((a, b) => a.annual! - b.annual!);
+}, [providers, extracted]);
 
   const nightShare = useMemo(() => {
     if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
@@ -485,7 +510,7 @@ export default function VoltlyLanding() {
                     <div className="mt-4 text-sm text-slate-600">Upload a bill to enable comparisons.</div>
                   ) : (
                     <div className="mt-4 space-y-2">
-                      {providerQuotes.map(({ p, annual }) => {
+                      {providerQuotes.map(({ p, annual, delta }) => {
                         const active = selectedProvider?.name === p.name;
                         return (
                           <button
@@ -498,8 +523,30 @@ export default function VoltlyLanding() {
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="text-sm font-semibold">{p.name}</div>
-                              <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
-                                {formatGBP(annual)}
+                              <div className="flex items-center gap-2">
+                                {delta != null ? (() => {
+                                  const d = formatDelta(delta);
+                                  const pill =
+                                    d.kind === "good"
+                                      ? active
+                                        ? "bg-emerald-500/25 text-white"
+                                        : "bg-emerald-100 text-emerald-800"
+                                      : d.kind === "bad"
+                                      ? active
+                                        ? "bg-rose-500/25 text-white"
+                                        : "bg-rose-100 text-rose-800"
+                                      : active
+                                      ? "bg-white/20 text-white"
+                                      : "bg-slate-100 text-slate-700";
+                                  return (
+                                    <span className={["rounded-full px-2 py-0.5 text-[11px] font-semibold", pill].join(" ")}>
+                                      {d.label}
+                                    </span>
+                                  );
+                                })() : null}
+                                <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
+                                  {formatGBP(annual)}
+                                </div>
                               </div>
                             </div>
                             <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
@@ -523,12 +570,58 @@ export default function VoltlyLanding() {
                       </div>
                     </div>
                     <div className="text-sm">
-                      <span className="text-slate-600">Estimated annual cost: </span>
-                      <span className="font-semibold">{formatGBP(annualCostGBP(extracted, selectedProvider))}</span>
+                      <span className="text-slate-600">Selected tariff: </span>
+                      <span className="font-semibold">{selectedProvider.name}</span>
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  
+{(() => {
+  const current = currentAnnualCost(extracted);
+  const other = annualCostGBP(extracted, selectedProvider);
+  const delta = current != null && other != null ? other - current : undefined;
+  const d = formatDelta(delta);
+  const style =
+    d.kind === "good"
+      ? "border-emerald-200 bg-emerald-50"
+      : d.kind === "bad"
+      ? "border-rose-200 bg-rose-50"
+      : "border-slate-200 bg-white";
+  const text =
+    d.kind === "good"
+      ? "text-emerald-800"
+      : d.kind === "bad"
+      ? "text-rose-800"
+      : "text-slate-900";
+
+  return (
+    <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="text-xs font-semibold text-slate-500">Your estimated annual</div>
+        <div className="mt-1 text-2xl font-semibold">{formatGBP(current)}</div>
+        <div className="mt-1 text-xs text-slate-500">From extracted rates + usage</div>
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="text-xs font-semibold text-slate-500">{selectedProvider.name} estimated annual</div>
+        <div className="mt-1 text-2xl font-semibold">{formatGBP(other)}</div>
+        <div className="mt-1 text-xs text-slate-500">Mock tariff (demo data)</div>
+      </div>
+      <div className={["rounded-2xl border p-4", style].join(" ")}>
+        <div className="text-xs font-semibold text-slate-500">Difference</div>
+        <div className={["mt-1 text-2xl font-semibold", text].join(" ")}>{d.label}</div>
+        <div className="mt-1 text-xs text-slate-500">
+          {d.kind === "good"
+            ? "Cheaper than your current estimate."
+            : d.kind === "bad"
+            ? "More expensive than your current estimate."
+            : "Pick another supplier to compare."}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
+<div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div className="rounded-2xl border border-slate-200 bg-white p-4">
                       <div className="text-sm font-semibold">Your current rates</div>
                       <div className="mt-3 grid gap-3 sm:grid-cols-3">
