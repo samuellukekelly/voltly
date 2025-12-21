@@ -397,234 +397,44 @@ export default function VoltlyLanding() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <div className="grid gap-0 md:grid-cols-[1fr_280px]">
-                <div className="p-5">
-                  {!extracted ? (
-                    <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-slate-200 p-4">
-                          <div className="text-xs font-semibold text-slate-500">Supplier</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.supplier ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 p-4">
-                          <div className="text-xs font-semibold text-slate-500">Tariff</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.tariffName ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 p-4">
-                          <div className="text-xs font-semibold text-slate-500">Billing period</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.period ?? "—"}</div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 p-4">
-                          <div className="text-xs font-semibold text-slate-500">Region alpha</div>
-                          <div className="mt-1 text-sm font-medium">{extracted.postcodeAlpha ?? "—"}</div>
-                        </div>
+            
+<div className="flex-1 overflow-hidden">
+            <div className="grid h-full md:grid-cols-[1fr_360px]">
+              {/* LEFT: extracted details */}
+              <div className="min-h-0 overflow-y-auto p-5">
+                {!extracted ? (
+                  <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Supplier</div>
+                        <div className="mt-1 text-sm font-medium">{extracted.supplier ?? "—"}</div>
                       </div>
-
-                      <div className="rounded-2xl border border-slate-200 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold">Electricity rates</div>
-                            <div className="mt-1 text-xs text-slate-500">Day/Night shown if detected.</div>
-                          </div>
-                          <div className="text-xs text-slate-500">Payment: {extracted.paymentMethod ?? "—"}</div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Day</div>
-                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityDayRateP)}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Night</div>
-                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityNightRateP)}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Standing</div>
-                            <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityStandingPPerDay)} / day</div>
-                            <div className="text-xs text-slate-500">{formatGBP(extracted.electricityStandingPerYearGBP)} / year</div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Day kWh</div>
-                            <div className="mt-1 text-sm font-medium">{extracted.electricDayKwh ?? "—"}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Night kWh</div>
-                            <div className="mt-1 text-sm font-medium">{extracted.electricNightKwh ?? "—"}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Total kWh</div>
-                            <div className="mt-1 text-sm font-medium">{extracted.electricTotalKwh ?? "—"}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">Night share</div>
-                            <div className="mt-1 text-sm font-medium">{percent(nightShare)}</div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                          <div className="text-sm">
-                            <span className="text-slate-500">Electric total (bill): </span>
-                            <span className="font-semibold">{formatGBP(extracted.electricTotalGBP)}</span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-slate-500">Est. annual electric: </span>
-                            <span className="font-semibold">{formatGBP(extracted.electricityEstimatedAnnualGBP)}</span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-slate-500">Est. annual gas: </span>
-                            <span className="font-semibold">{formatGBP(extracted.gasEstimatedAnnualGBP)}</span>
-                          </div>
-                        </div>
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Tariff</div>
+                        <div className="mt-1 text-sm font-medium">{extracted.tariffName ?? "—"}</div>
                       </div>
-
-                      <details className="rounded-2xl border border-slate-200 p-4">
-                        <summary className="cursor-pointer text-sm font-semibold">Raw text sample (debug)</summary>
-                        <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-                          {extracted.rawTextSample}
-                        </pre>
-                      </details>
-                    </div>
-                  )}
-                </div>
-
-                <aside className="border-t border-slate-200 p-5 md:border-l md:border-t-0 md:sticky md:top-[76px] md:h-[calc(90vh-76px)] md:overflow-y-auto">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold">Compare against</div>
-                      <div className="mt-1 text-xs text-slate-500">Sorted by estimated annual cost.</div>
-                    </div>
-                    {selectedProvider ? (
-                      <button className="text-xs font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedProvider(null)}>
-                        Clear
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {!extracted ? (
-                    <div className="mt-4 text-sm text-slate-600">Upload a bill to enable comparisons.</div>
-                  ) : (
-                    <div className="mt-4 space-y-2">
-                      {providerQuotes.map(({ p, annual, delta }) => {
-                        const active = selectedProvider?.name === p.name;
-                        return (
-                          <button
-                            key={p.name}
-                            onClick={() => setSelectedProvider(p)}
-                            className={[
-                              "w-full rounded-xl border px-3 py-2 text-left transition",
-                              active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50",
-                            ].join(" ")}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm font-semibold">{p.name}</div>
-                              <div className="flex items-center gap-2">
-                                {delta != null ? (() => {
-                                  const d = formatDelta(delta);
-                                  const pill =
-                                    d.kind === "good"
-                                      ? active
-                                        ? "bg-emerald-500/25 text-white"
-                                        : "bg-emerald-100 text-emerald-800"
-                                      : d.kind === "bad"
-                                      ? active
-                                        ? "bg-rose-500/25 text-white"
-                                        : "bg-rose-100 text-rose-800"
-                                      : active
-                                      ? "bg-white/20 text-white"
-                                      : "bg-slate-100 text-slate-700";
-                                  return (
-                                    <span className={["rounded-full px-2 py-0.5 text-[11px] font-semibold", pill].join(" ")}>
-                                      {d.label}
-                                    </span>
-                                  );
-                                })() : null}
-                                <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
-                                  {formatGBP(annual)}
-                                </div>
-                              </div>
-                            </div>
-                            <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
-                              Day {formatPence(p.dayP)} • Night {formatPence(p.nightP)} • Standing {formatPence(p.standingPPerDay)}/day
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </aside>
-              </div>
-
-              {selectedProvider && extracted && (
-                <div className="border-t border-slate-200 bg-slate-50 p-5">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">Comparison view</div>
-                      <div className="mt-1 text-xs text-slate-600">
-                        Mirroring the extracted screen using mock rates for <span className="font-semibold">{selectedProvider.name}</span>.
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Billing period</div>
+                        <div className="mt-1 text-sm font-medium">{extracted.period ?? "—"}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <div className="text-xs font-semibold text-slate-500">Region alpha</div>
+                        <div className="mt-1 text-sm font-medium">{extracted.postcodeAlpha ?? "—"}</div>
                       </div>
                     </div>
-                    <div className="text-sm">
-                      <span className="text-slate-600">Selected tariff: </span>
-                      <span className="font-semibold">{selectedProvider.name}</span>
-                    </div>
-                  </div>
 
-                  
-{(() => {
-  const current = currentAnnualCost(extracted);
-  const other = annualCostGBP(extracted, selectedProvider);
-  const delta = current != null && other != null ? other - current : undefined;
-  const d = formatDelta(delta);
-  const style =
-    d.kind === "good"
-      ? "border-emerald-200 bg-emerald-50"
-      : d.kind === "bad"
-      ? "border-rose-200 bg-rose-50"
-      : "border-slate-200 bg-white";
-  const text =
-    d.kind === "good"
-      ? "text-emerald-800"
-      : d.kind === "bad"
-      ? "text-rose-800"
-      : "text-slate-900";
+                    <div className="rounded-2xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold">Electricity rates</div>
+                          <div className="mt-1 text-xs text-slate-500">Day/Night shown if detected.</div>
+                        </div>
+                        <div className="text-xs text-slate-500">Payment: {extracted.paymentMethod ?? "—"}</div>
+                      </div>
 
-  return (
-    <div className="mt-4 grid gap-3 md:grid-cols-3">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="text-xs font-semibold text-slate-500">Your estimated annual</div>
-        <div className="mt-1 text-2xl font-semibold">{formatGBP(current)}</div>
-        <div className="mt-1 text-xs text-slate-500">From extracted rates + usage</div>
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="text-xs font-semibold text-slate-500">{selectedProvider.name} estimated annual</div>
-        <div className="mt-1 text-2xl font-semibold">{formatGBP(other)}</div>
-        <div className="mt-1 text-xs text-slate-500">Mock tariff (demo data)</div>
-      </div>
-      <div className={["rounded-2xl border p-4", style].join(" ")}>
-        <div className="text-xs font-semibold text-slate-500">Difference</div>
-        <div className={["mt-1 text-2xl font-semibold", text].join(" ")}>{d.label}</div>
-        <div className="mt-1 text-xs text-slate-500">
-          {d.kind === "good"
-            ? "Cheaper than your current estimate."
-            : d.kind === "bad"
-            ? "More expensive than your current estimate."
-            : "Pick another supplier to compare."}
-        </div>
-      </div>
-    </div>
-  );
-})()}
-
-<div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="text-sm font-semibold">Your current rates</div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[11px] font-semibold text-slate-500">Day</div>
                           <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityDayRateP)}</div>
@@ -636,42 +446,227 @@ export default function VoltlyLanding() {
                         <div className="rounded-xl bg-slate-50 p-3">
                           <div className="text-[11px] font-semibold text-slate-500">Standing</div>
                           <div className="mt-1 text-sm font-medium">{formatPence(extracted.electricityStandingPPerDay)} / day</div>
+                          <div className="text-xs text-slate-500">{formatGBP(extracted.electricityStandingPerYearGBP)} / year</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Day kWh</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.electricDayKwh ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Night kWh</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.electricNightKwh ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Total kWh</div>
+                          <div className="mt-1 text-sm font-medium">{extracted.electricTotalKwh ?? "—"}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-[11px] font-semibold text-slate-500">Night share</div>
+                          <div className="mt-1 text-sm font-medium">{percent(nightShare)}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-sm">
+                          <span className="text-slate-500">Electric total (bill): </span>
+                          <span className="font-semibold">{formatGBP(extracted.electricTotalGBP)}</span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="text-slate-500">Est. annual electric: </span>
+                          <span className="font-semibold">{formatGBP(extracted.electricityEstimatedAnnualGBP)}</span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="text-slate-500">Est. annual gas: </span>
+                          <span className="font-semibold">{formatGBP(extracted.gasEstimatedAnnualGBP)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="text-sm font-semibold">{selectedProvider.name} (mock)</div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Day</div>
-                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.dayP)}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Night</div>
-                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.nightP)}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-[11px] font-semibold text-slate-500">Standing</div>
-                          <div className="mt-1 text-sm font-medium">{formatPence(selectedProvider.standingPPerDay)} / day</div>
-                        </div>
+                    <details className="rounded-2xl border border-slate-200 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold">Raw text sample (debug)</summary>
+                      <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+                        {extracted.rawTextSample}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+              </div>
+
+              {/* RIGHT: compare list + comparison */}
+              <aside className="min-h-0 border-t border-slate-200 bg-white md:border-l md:border-t-0">
+                <div className="flex h-full flex-col">
+                  <div className="border-b border-slate-200 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">Compare against</div>
+                        <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost.</div>
                       </div>
+                      {selectedProvider ? (
+                        <button
+                          className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                          onClick={() => setSelectedProvider(null)}
+                        >
+                          Clear
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap justify-end gap-3">
-                    <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setSelectedProvider(null)}>
-                      Back to list
-                    </button>
-                    <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={() => alert("Next step: multi-provider table + savings + switch journey.")}>
-                      Compare all
-                    </button>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                    {!extracted ? (
+                      <div className="text-sm text-slate-600">Upload a bill to enable comparisons.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {providerQuotes.map(({ p, annual, delta }) => {
+                          const active = selectedProvider?.name === p.name;
+                          const d = formatDelta(delta);
+                          return (
+                            <button
+                              key={p.name}
+                              onClick={() => setSelectedProvider(p)}
+                              className={[
+                                "w-full rounded-xl border px-3 py-2 text-left transition",
+                                active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50",
+                              ].join(" ")}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-semibold">{p.name}</div>
+                                <div className="flex items-center gap-2">
+                                  {delta != null ? (
+                                    <span
+                                      className={[
+                                        "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                        delta < 0
+                                          ? active
+                                            ? "bg-emerald-500/20 text-white"
+                                            : "bg-emerald-100 text-emerald-800"
+                                          : active
+                                          ? "bg-rose-500/20 text-white"
+                                          : "bg-rose-100 text-rose-800",
+                                      ].join(" ")}
+                                    >
+                                      {d.label}
+                                    </span>
+                                  ) : null}
+                                  <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>
+                                    {formatGBP(annual)}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
+                                Day {formatPence(p.dayP)} • Night {formatPence(p.nightP)} • Standing {formatPence(p.standingPPerDay)}/day
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {selectedProvider && extracted ? (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        {(() => {
+                          const current = currentAnnualCost(extracted);
+                          const other = annualCostGBP(extracted, selectedProvider);
+                          const delta = current != null && other != null ? other - current : undefined;
+                          const d = formatDelta(delta);
+                          const cheaper = d.isCheaper === true;
+                          const more = d.isCheaper === false && delta != null && delta > 0;
+
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-semibold">Estimated annual comparison</div>
+                                  <div className="mt-1 text-xs text-slate-600">Demo uses mock supplier rates for now.</div>
+                                </div>
+                                <span
+                                  className={[
+                                    "rounded-full px-2 py-1 text-xs font-semibold",
+                                    cheaper ? "bg-emerald-100 text-emerald-900" : more ? "bg-rose-100 text-rose-900" : "bg-white text-slate-700",
+                                  ].join(" ")}
+                                >
+                                  {d.label}
+                                </span>
+                              </div>
+
+                              <div className="grid gap-2">
+                                <div className="flex items-center justify-between rounded-xl bg-white p-3">
+                                  <div className="text-xs text-slate-600">You (from bill)</div>
+                                  <div className="text-sm font-semibold">{formatGBP(current)}</div>
+                                </div>
+                                <div className="flex items-center justify-between rounded-xl bg-white p-3">
+                                  <div className="text-xs text-slate-600">{selectedProvider.name}</div>
+                                  <div className="text-sm font-semibold">{formatGBP(other)}</div>
+                                </div>
+                              </div>
+
+                              <div
+                                className={[
+                                  "rounded-xl border p-3 text-sm",
+                                  cheaper
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                    : more
+                                    ? "border-rose-200 bg-rose-50 text-rose-900"
+                                    : "border-slate-200 bg-white text-slate-700",
+                                ].join(" ")}
+                              >
+                                {cheaper ? "Cheaper than your current estimate." : more ? "More expensive than your current estimate." : "—"}
+                              </div>
+
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-xl bg-white p-3">
+                                  <div className="text-xs font-semibold text-slate-500">Your rates</div>
+                                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Day</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(extracted.electricityDayRateP)}</div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Night</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(extracted.electricityNightRateP)}</div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Stand</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(extracted.electricityStandingPPerDay)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="rounded-xl bg-white p-3">
+                                  <div className="text-xs font-semibold text-slate-500">{selectedProvider.name} (mock)</div>
+                                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Day</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(selectedProvider.dayP)}</div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Night</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(selectedProvider.nightP)}</div>
+                                    </div>
+                                    <div className="rounded-lg bg-slate-50 p-2">
+                                      <div className="text-slate-500">Stand</div>
+                                      <div className="font-semibold text-slate-900">{formatPence(selectedProvider.standingPPerDay)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-600">
+                        Select a supplier to see the side-by-side comparison here.
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </aside>
             </div>
           </div>
-        </div>
       )}
 
       <footer className="border-t border-slate-200 py-8">
