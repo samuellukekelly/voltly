@@ -1,18 +1,14 @@
-# Voltly
+# Voltly (Vercel-ready)
 
-Fully web-based bill upload + extraction MVP (Next.js + Tailwind), built to deploy on **Vercel**.
-
-## Why Vercel blocked your deploy
-Vercel blocks **vulnerable Next.js versions** affected by CVE-2025-66478.  
-Per Vercel’s bulletin, **Next.js 15.0.x must be >= 15.0.5**. citeturn2view0
-
-This repo pins:
-- `next`: **15.0.5**
-- `eslint-config-next`: **15.0.5**
+Next.js + Tailwind landing page with:
+- PDF bill upload (text-based PDFs)
+- Extraction modal
+- **Compare Against** sidebar + mirrored comparison panel (mock tariffs)
 
 ## Deploy
-1. Upload to GitHub
-2. Vercel → New Project → import → Deploy
+1) Push to GitHub
+2) Vercel → New Project → import repo → Deploy
 
-## PDF Worker
-`postinstall` copies PDF.js worker into `/public/pdf.worker.min.mjs` and the app points PDF.js to that file.
+Notes:
+- This is still a front-end-only demo. The compare rates are mocked.
+- Scanned PDFs will need OCR via a backend.
