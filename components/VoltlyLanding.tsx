@@ -450,14 +450,14 @@ export default function VoltlyLanding() {
 
       {/* Modal */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto">
           <div
             className={[
-              "w-full rounded-2xl bg-white shadow-xl transition-[max-width] duration-300",
+              "w-full rounded-2xl bg-white shadow-xl transition-[max-width] duration-300 overflow-hidden max-h-[90vh]",
               selectedProvider ? "max-w-6xl" : "max-w-2xl",
             ].join(" ")}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5">
               <div>
                 <div className="text-lg font-semibold">Extracted bill details</div>
                 <div className="mt-1 text-sm text-slate-500">Review these values before running comparisons.</div>
@@ -477,7 +477,8 @@ export default function VoltlyLanding() {
               </button>
             </div>
 
-            <div className="grid gap-0 md:grid-cols-[1fr_280px]">
+            <div className="overflow-y-auto">
+              <div className="grid gap-0 md:grid-cols-[1fr_280px]">
               {/* Main content (left) */}
               <div className="p-5">
                 {!extracted ? (
@@ -585,7 +586,7 @@ export default function VoltlyLanding() {
               </div>
 
               {/* Sidebar (right): compare against */}
-              <aside className="border-t border-slate-200 p-5 md:border-l md:border-t-0">
+              <aside className="border-t border-slate-200 p-5 md:border-l md:border-t-0 md:max-h-[calc(90vh-88px)] md:overflow-y-auto">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold">Compare against</div>
@@ -713,6 +714,8 @@ export default function VoltlyLanding() {
                 </div>
               </div>
             )}
+              </div>
+            </div>
           </div>
         </div>
       )}
