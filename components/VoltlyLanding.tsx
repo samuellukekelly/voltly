@@ -137,8 +137,8 @@ function annualCostGBP(extracted: Extracted, provider: Provider): number | undef
   if (totalKwh == null || totalKwh <= 0) return undefined;
 
   // If we have day/night split, use it. Else assume all as day.
-  const dayKwh = extracted.electricDayKwh ?? extracted.electricTotalKwh;
-  const nightKwh = extracted.electricNightKwh ?? 0;
+  const dayKwh: number = extracted.electricDayKwh ?? totalKwh;
+  const nightKwh: number = extracted.electricNightKwh ?? 0;
 
   const dayCost = (dayKwh * provider.dayP) / 100;
   const nightCost = (nightKwh * provider.nightP) / 100;
