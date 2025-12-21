@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -26,6 +27,87 @@ type Extracted = {
   notes: string[];
   rawTextSample?: string;
 };
+
+type ProviderOption = {
+  providerId: string;
+  providerCode: string;
+  providerName: string;
+  tariffId: string;
+  tariffName: string;
+  tariffType: string;
+  fuel: string;
+  paymentMethod: string;
+  termMonths?: number | null;
+  endDate?: string | null;
+  // electricity
+  unitRateP: number;
+  standingPPerDay: number;
+  // gas (for later)
+  gasUnitRateP: number;
+  gasStandingPPerDay: number;
+  lastUpdated?: string | null;
+};
+
+async function fetchProviderOptionsFromSupabase(regionCode: string): Promise<ProviderOption[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error("Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+
+  // Pull only suppliers that have at least one tariff rate row in the region:
+  // tariff_rates (region_code=...) -> tariffs -> providers
+  const { data, error } = await supabase
+    .from("tariff_rates")
+    .select(
+      `
+      region_code,
+      electricity_unit_rate_p_per_kwh,
+      electricity_standing_charge_p_per_day,
+      gas_unit_rate_p_per_kwh,
+      gas_standing_charge_p_per_day,
+      last_updated,
+      tariffs!inner(
+        id,
+        tariff_name,
+        tariff_type,
+        fuel,
+        payment_method,
+        term_months,
+        end_date,
+        providers!inner(
+          id,
+          provider_code,
+          provider_name
+        )
+      )
+    `
+    )
+    .eq("region_code", regionCode);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as any[];
+
+  return rows.map((r) => {
+    const t = r.tariffs;
+    const p = t?.providers;
+    return {
+      providerId: p?.id,
+      providerCode: p?.provider_code,
+      providerName: p?.provider_name,
+      tariffId: t?.id,
+      tariffName: t?.tariff_name,
+      tariffType: t?.tariff_type,
+      fuel: t?.fuel,
+      paymentMethod: t?.payment_method,
+      termMonths: t?.term_months ?? null,
+      endDate: t?.end_date ?? null,
+      unitRateP: Number(r.electricity_unit_rate_p_per_kwh),
+      standingPPerDay: Number(r.electricity_standing_charge_p_per_day),
+      gasUnitRateP: Number(r.gas_unit_rate_p_per_kwh),
+      gasStandingPPerDay: Number(r.gas_standing_charge_p_per_day),
+      lastUpdated: r.last_updated ?? null,
+    } as ProviderOption;
+  }).filter((x) => x.providerId && x.tariffId && Number.isFinite(x.unitRateP) && Number.isFinite(x.standingPPerDay));
+}
 
 type Provider = {
   name: string;
@@ -133,6 +215,15 @@ function formatPence(p?: number) {
   return `${p.toFixed(2)}p`;
 }
 
+function annualFromExtracted(extracted: Extracted) {
+  // If bill provides estimated annual electric, prefer it. Otherwise approximate using extracted kWh and unit rates.
+  if (extracted.electricityEstimatedAnnualGBP != null) return extracted.electricityEstimatedAnnualGBP;
+  const totalKwh = extracted.electricTotalKwh ?? ( (extracted.electricDayKwh ?? 0) + (extracted.electricNightKwh ?? 0) );
+  const unitP = extracted.electricityDayRateP ?? extracted.electricityNightRateP ?? 0;
+  const standing = ((extracted.electricityStandingPPerDay ?? 0) / 100) * 365;
+  return (totalKwh * (unitP / 100)) + standing;
+}
+
 function formatGBP(g?: number) {
   if (g == null) return "—";
   return `£${g.toFixed(2)}`;
@@ -181,6 +272,9 @@ export default function VoltlyLanding() {
 const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
+  const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providersError, setProvidersError] = useState<string | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
@@ -339,20 +433,81 @@ useEffect(() => {
     return extracted.electricNightKwh / extracted.electricTotalKwh;
   }, [extracted]);
 
+  const regionCode = extracted?.postcodeAlpha || "M";
+  
+  React.useEffect(() => {
+    let alive = true;
+    async function run() {
+      if (!open || !extracted) return;
+      setProvidersLoading(true);
+      setProvidersError(null);
+      try {
+        const opts = await fetchProviderOptionsFromSupabase(regionCode);
+        if (!alive) return;
+        setProviderOptions(opts);
+      } catch (e: any) {
+        const msg = typeof e?.message === "string" ? e.message : "Unknown error";
+        if (!alive) return;
+        setProvidersError(msg);
+        setProviderOptions([]);
+      } finally {
+        if (alive) setProvidersLoading(false);
+      }
+    }
+    run();
+    return () => { alive = false; };
+  }, [open, extracted, regionCode]);
+
   const currentAnnual = useMemo(() => (extracted ? currentAnnualCost(extracted) : undefined), [extracted]);
 
   const providerQuotes = useMemo(() => {
-    if (!extracted) return [];
-    const current = currentAnnualCost(extracted);
-    return providers
-      .map((p) => {
-        const annual = annualCostGBP(extracted!, p);
-        const delta = current != null && annual != null ? annual - current : undefined;
-        return { p, annual, delta };
-      })
-      .filter((x) => x.annual != null)
-      .sort((a, b) => (a.annual! - b.annual!));
-  }, [extracted, providers]);
+  if (!extracted) return [];
+  if (!providerOptions.length) return [];
+
+  // For this MVP, we assume a single electricity unit rate per kWh (no separate night rate in DB).
+  // If the uploaded bill includes day/night usage, we apply the same unit rate to both.
+  const currentAnnual = annualFromExtracted(extracted);
+
+  // Find the best (cheapest) tariff per provider
+  const bestByProvider = new Map<string, { option: ProviderOption; annual: number }>();
+
+  for (const option of providerOptions) {
+    const annual = annualCostGBP(extracted, {
+      provider: option.providerName,
+      providerCode: option.providerCode,
+      dayP: option.unitRateP,
+      nightP: option.unitRateP,
+      standingPPerDay: option.standingPPerDay,
+      estimatedAnnual: 0,
+    });
+
+    const prev = bestByProvider.get(option.providerId);
+    if (!prev || annual < prev.annual) bestByProvider.set(option.providerId, { option, annual });
+  }
+
+  const rows = Array.from(bestByProvider.values())
+    .map(({ option, annual }) => {
+      const delta = annual - currentAnnual;
+      const cheaper = delta < 0;
+      return {
+        id: option.providerId + ":" + option.tariffId,
+        providerId: option.providerId,
+        provider: option.providerName,
+        providerCode: option.providerCode,
+        tariffId: option.tariffId,
+        tariffName: option.tariffName,
+        dayP: option.unitRateP,
+        nightP: option.unitRateP,
+        standingPPerDay: option.standingPPerDay,
+        estimatedAnnual: annual,
+        delta,
+        cheaper,
+      };
+    })
+    .sort((a, b) => a.estimatedAnnual - b.estimatedAnnual);
+
+  return rows;
+}, [extracted, providerOptions]);
 
   const onPick = () => fileRef.current?.click();
 
@@ -634,7 +789,7 @@ useEffect(() => {
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <div className="text-sm font-semibold">Compare against</div>
-                            <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost.
+                            <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost. (Region: {regionCode})
                     {supabaseMsg ? (
                       <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
                         {supabaseMsg}
