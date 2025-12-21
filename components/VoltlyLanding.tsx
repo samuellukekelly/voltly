@@ -1,16 +1,13 @@
-\
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-
-// PDF.js (browser)
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
-// Use a same-origin worker we copy into /public in postinstall.
+// We copy the worker into /public during postinstall.
+// Using a same-origin worker avoids CSP/CDN issues on Vercel.
 try {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 } catch {
   // no-op
 }
@@ -82,6 +79,7 @@ function parseFromText(text: string): Extracted {
     t.match(/Standing Charge\s*[0-9]+\.?[0-9]*p\s*\/\s*day\s*\(£\s*([0-9]+\.?[0-9]*)\s*\/\s*year\)/i)
   );
 
+  // Usage examples (Octopus Go bill style) — these regexes are deliberately specific for the demo.
   const nightKwh = numFromMatch(t.match(/8\.10p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const dayKwh = numFromMatch(t.match(/28\.42p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const totalKwh =
@@ -485,9 +483,7 @@ export default function VoltlyLanding() {
                     </button>
                     <button
                       className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                      onClick={() => {
-                        alert("Next step: wire extraction into a tariff database + quote engine.");
-                      }}
+                      onClick={() => alert("Next step: wire extraction into a tariff database + quote engine.")}
                     >
                       Compare tariffs
                     </button>

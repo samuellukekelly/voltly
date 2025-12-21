@@ -1,17 +1,17 @@
 # Voltly
 
-A simple, fully web-based bill upload + extraction MVP built with Next.js (App Router) and Tailwind.
+Fully web-based bill upload + extraction MVP (Next.js + Tailwind).  
+Designed to deploy cleanly on **Vercel**.
 
 ## What it does
 - Upload a **text-based** PDF bill (not scanned)
 - Extracts a few key values (optimised for Octopus-style bills)
 - Shows extracted values in a pop-out modal
 
-## Deploy to Vercel (no local dev required)
-1. Create a new GitHub repo and upload the contents of this zip.
-2. In Vercel: **New Project** → import the repo.
-3. Framework preset: **Next.js**
-4. Build command: `next build` (default)
-5. Output: handled by Next (default)
+## Deploy (no local server required)
+1. Upload this repo to GitHub
+2. Vercel → New Project → import the repo → Deploy
 
-Vercel will run `postinstall`, which copies the PDF.js worker to `/public/pdf.worker.min.js`.
+### Notes
+- Vercel runs `postinstall`, which copies PDF.js worker into `/public/pdf.worker.min.mjs`.
+- The app then points PDF.js at `/pdf.worker.min.mjs` (same-origin = fewer CSP issues).
