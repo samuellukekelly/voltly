@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+// Use the ESM .mjs build (exists in pdfjs-dist v4+) and provide ambient types in /types.
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
 // We copy the worker into /public during postinstall.
 // Using a same-origin worker avoids CSP/CDN issues on Vercel.
@@ -79,7 +80,7 @@ function parseFromText(text: string): Extracted {
     t.match(/Standing Charge\s*[0-9]+\.?[0-9]*p\s*\/\s*day\s*\(£\s*([0-9]+\.?[0-9]*)\s*\/\s*year\)/i)
   );
 
-  // Usage examples (Octopus Go bill style) — these regexes are deliberately specific for the demo.
+  // Usage examples (Octopus Go bill style) — demo regexes.
   const nightKwh = numFromMatch(t.match(/8\.10p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const dayKwh = numFromMatch(t.match(/28\.42p\s*\/\s*kWh\s*([0-9]+\.?[0-9]*)\s*kWh/i));
   const totalKwh =
@@ -118,7 +119,9 @@ function parseFromText(text: string): Extracted {
 
 async function extractPdfText(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
+  // @ts-ignore
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  // @ts-ignore
   const pdf = await loadingTask.promise;
 
   let fullText = "";
@@ -139,12 +142,10 @@ function formatPence(p?: number) {
   if (p == null) return "—";
   return `${p.toFixed(2)}p`;
 }
-
 function formatGBP(g?: number) {
   if (g == null) return "—";
   return `£${g.toFixed(2)}`;
 }
-
 function percent(n?: number) {
   if (n == null) return "—";
   return `${(n * 100).toFixed(0)}%`;
@@ -183,9 +184,7 @@ export default function VoltlyLanding() {
         const cleaned = text.replace(/\s+/g, " ").trim();
 
         if (cleaned.length < 200) {
-          setErr(
-            "This PDF looks like a scan (no selectable text). This demo can only extract from text-based PDFs. Add backend OCR for scanned bills."
-          );
+          setErr("This PDF looks like a scan (no selectable text). This demo can only extract from text-based PDFs.");
           return;
         }
 
@@ -193,9 +192,7 @@ export default function VoltlyLanding() {
         setExtracted(parsed);
         setOpen(true);
       } else if (isImage) {
-        setErr(
-          "Image upload detected. This demo extracts text from text-based PDFs only. For photos/scans, add backend OCR (queue + OCR service)."
-        );
+        setErr("Image upload detected. This demo extracts text from text-based PDFs only.");
       } else {
         setErr("Unsupported file type. Please upload a PDF bill.");
       }
@@ -213,12 +210,7 @@ export default function VoltlyLanding() {
         <div className="flex items-center gap-2">
           <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-white shadow-sm">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-              <path
-                d="M13 2L3 14H11L9 22L21 9H13L13 2Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
+              <path d="M13 2L3 14H11L9 22L21 9H13L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             </svg>
           </div>
           <div className="leading-tight">
@@ -226,18 +218,10 @@ export default function VoltlyLanding() {
             <div className="text-xs text-slate-500">Upload → Extract → Compare</div>
           </div>
         </div>
-
         <div className="hidden items-center gap-3 sm:flex">
-          <a className="text-sm text-slate-600 hover:text-slate-900" href="#how">
-            How it works
-          </a>
-          <a className="text-sm text-slate-600 hover:text-slate-900" href="#privacy">
-            Privacy
-          </a>
-          <button
-            onClick={onPick}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 active:scale-[0.99]"
-          >
+          <a className="text-sm text-slate-600 hover:text-slate-900" href="#how">How it works</a>
+          <a className="text-sm text-slate-600 hover:text-slate-900" href="#privacy">Privacy</a>
+          <button onClick={onPick} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800">
             Upload bill
           </button>
         </div>
@@ -249,8 +233,7 @@ export default function VoltlyLanding() {
             See what your bill would cost on other tariffs — in seconds.
           </h1>
           <p className="mt-4 max-w-2xl text-pretty text-base text-slate-600 sm:text-lg">
-            Upload your gas or electricity bill and Voltly extracts your unit rates, standing charges and usage (including day/night where
-            available). Then we show a side-by-side comparison so you can spot genuine savings.
+            Upload your gas or electricity bill and Voltly extracts your unit rates, standing charges and usage (including day/night where available).
           </p>
 
           <div className="mt-10 w-full">
@@ -270,20 +253,8 @@ export default function VoltlyLanding() {
               >
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-white shadow-sm">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                    <path
-                      d="M12 16V4M12 4L7 9M12 4L17 9"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path
-                      d="M4 16V20H20V16"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 16V20H20V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </span>
                 <span>
@@ -294,27 +265,18 @@ export default function VoltlyLanding() {
 
               <div className="mt-4 text-sm text-slate-500">
                 {filename ? (
-                  <span>
-                    Selected: <span className="font-medium text-slate-700">{filename}</span>
-                  </span>
+                  <span>Selected: <span className="font-medium text-slate-700">{filename}</span></span>
                 ) : (
-                  <span>Tip: If your PDF is scanned, you’ll need OCR (we can add this to the backend in the next iteration).</span>
+                  <span>Tip: If your PDF is scanned, you’ll need OCR (backend) — this demo is browser-only.</span>
                 )}
               </div>
 
-              {err && (
-                <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{err}</div>
-              )}
+              {err && <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{err}</div>}
 
               {extracted && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                  <span>
-                    Extracted details ready. <span className="font-medium">Open the popout</span> to review.
-                  </span>
-                  <button
-                    onClick={() => setOpen(true)}
-                    className="rounded-lg bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-600"
-                  >
+                  <span>Extracted details ready. <span className="font-medium">Open the popout</span> to review.</span>
+                  <button onClick={() => setOpen(true)} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-600">
                     View extraction
                   </button>
                 </div>
@@ -335,7 +297,7 @@ export default function VoltlyLanding() {
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="text-sm font-semibold">3) Compare</div>
-              <div className="mt-2 text-sm text-slate-600">Voltly calculates like-for-like annual costs and highlights real savings.</div>
+              <div className="mt-2 text-sm text-slate-600">Next step: connect to a tariff database and compute like-for-like annual costs.</div>
             </div>
           </div>
         </section>
@@ -345,8 +307,7 @@ export default function VoltlyLanding() {
             <div className="text-sm font-semibold text-slate-900">Privacy-first by design</div>
             <ul className="mt-3 list-disc space-y-2 pl-5">
               <li>This demo processes text in your browser. No files are uploaded to a server.</li>
-              <li>For production OCR + comparisons, we’d auto-delete bill files after a short period (e.g. 7–30 days).</li>
-              <li>We only need tariff rates + usage to compare — not your entire bill history.</li>
+              <li>For production OCR + comparisons, you’d add a backend and auto-delete uploads after a short period.</li>
             </ul>
           </div>
         </section>
@@ -360,11 +321,7 @@ export default function VoltlyLanding() {
                 <div className="text-lg font-semibold">Extracted bill details</div>
                 <div className="mt-1 text-sm text-slate-500">Review these values before running comparisons.</div>
               </div>
-              <button
-                className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-              >
+              <button className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" onClick={() => setOpen(false)} aria-label="Close">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                   <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                   <path d="M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -473,21 +430,6 @@ export default function VoltlyLanding() {
                       {extracted.rawTextSample}
                     </pre>
                   </details>
-
-                  <div className="flex flex-wrap justify-end gap-3 pt-2">
-                    <button
-                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                      onClick={() => setOpen(false)}
-                    >
-                      Close
-                    </button>
-                    <button
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                      onClick={() => alert("Next step: wire extraction into a tariff database + quote engine.")}
-                    >
-                      Compare tariffs
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
