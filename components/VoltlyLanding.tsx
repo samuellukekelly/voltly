@@ -834,7 +834,8 @@ return compareRows.map((r) => {
                       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
                         <div className="text-xs font-semibold text-slate-500">Estimated cost for this bill period (electricity)</div>
                         <div className="mt-1 text-base font-semibold">{formatGBP(yourAnnualElectricity)}</div>
-                      
+	                      </div>
+
                       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
                         <div className="text-xs font-semibold text-slate-500">Bill period</div>
                         <div className="mt-1 text-sm font-medium">
@@ -876,7 +877,6 @@ return compareRows.map((r) => {
                         </div>
                       </div>
 
-</div>
                     </div>
 
                     {extracted.notes?.length ? (
@@ -1053,13 +1053,12 @@ return compareRows.map((r) => {
                     ) : null}
                   </div>
                 )}
-              </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+	              </div>
+	                </div>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
       )}
 
       <footer className="border-t border-slate-200 py-8">
