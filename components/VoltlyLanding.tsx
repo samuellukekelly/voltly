@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { supabase as supabaseClient } from "../lib/supabaseClient";
+import React, { useMemo, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
@@ -27,86 +27,31 @@ type Extracted = {
   rawTextSample?: string;
 };
 
-type ProviderOption = {
+type Provider = {
   providerId: string;
   providerCode: string;
-  providerName: string;
+  provider: string;
   tariffId: string;
   tariffName: string;
-  tariffType: string;
-  fuel: string;
-  paymentMethod: string;
-  termMonths?: number | null;
-  endDate?: string | null;
-  // electricity
-  unitRateP: number;
+  // We currently compare electricity using a single unit rate (no day/night in DB yet).
+  dayP: number;
+  nightP: number;
   standingPPerDay: number;
-  // gas (for later)
-  gasUnitRateP: number;
-  gasStandingPPerDay: number;
-  lastUpdated?: string | null;
+  estimatedAnnual: number;
 };
 
-async function fetchProviderOptionsFromSupabase(regionCode: string): Promise<ProviderOption[]> {
-  const sb = supabaseClient;
-  if (!sb) throw new Error("Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-
-  // Pull only suppliers that have at least one tariff rate row in the region:
-  // tariff_rates (region_code=...) -> tariffs -> providers
-  const { data, error } = await sb
-    .from("tariff_rates")
-    .select(
-      `
-      region_code,
-      electricity_unit_rate_p_per_kwh,
-      electricity_standing_charge_p_per_day,
-      gas_unit_rate_p_per_kwh,
-      gas_standing_charge_p_per_day,
-      last_updated,
-      tariffs!inner(
-        id,
-        tariff_name,
-        tariff_type,
-        fuel,
-        payment_method,
-        term_months,
-        end_date,
-        providers!inner(
-          id,
-          provider_code,
-          provider_name
-        )
-      )
-    `
-    )
-    .eq("region_code", regionCode);
-
-  if (error) throw error;
-
-  const rows = (data ?? []) as any[];
-
-  return rows.map((r) => {
-    const t = r.tariffs;
-    const p = t?.providers;
-    return {
-      providerId: p?.id,
-      providerCode: p?.provider_code,
-      providerName: p?.provider_name,
-      tariffId: t?.id,
-      tariffName: t?.tariff_name,
-      tariffType: t?.tariff_type,
-      fuel: t?.fuel,
-      paymentMethod: t?.payment_method,
-      termMonths: t?.term_months ?? null,
-      endDate: t?.end_date ?? null,
-      unitRateP: Number(r.electricity_unit_rate_p_per_kwh),
-      standingPPerDay: Number(r.electricity_standing_charge_p_per_day),
-      gasUnitRateP: Number(r.gas_unit_rate_p_per_kwh),
-      gasStandingPPerDay: Number(r.gas_standing_charge_p_per_day),
-      lastUpdated: r.last_updated ?? null,
-    } as ProviderOption;
-  }).filter((x) => x.providerId && x.tariffId && Number.isFinite(x.unitRateP) && Number.isFinite(x.standingPPerDay));
-}
+type TariffCompareRow = {
+  provider_code: string;
+  provider_name: string;
+  tariff_name: string;
+  region_code: string;
+  electricity_unit_rate_p_per_kwh: number;
+  electricity_standing_charge_p_per_day: number;
+  gas_unit_rate_p_per_kwh: number;
+  gas_standing_charge_p_per_day: number;
+  exit_fees_total_gbp: number | null;
+  last_updated: string | null;
+};
 
 function clampText(s: string, max = 900) {
   const t = s.replace(/\s+/g, " ").trim();
@@ -197,15 +142,6 @@ function formatPence(p?: number) {
   return `${p.toFixed(2)}p`;
 }
 
-function annualFromExtracted(extracted: Extracted) {
-  // If bill provides estimated annual electric, prefer it. Otherwise approximate using extracted kWh and unit rates.
-  if (extracted.electricityEstimatedAnnualGBP != null) return extracted.electricityEstimatedAnnualGBP;
-  const totalKwh = extracted.electricTotalKwh ?? ( ((extracted.electricDayKwh || 0)) + ((extracted.electricNightKwh || 0)) );
-  const unitP = (extracted.electricityDayRateP != null ? extracted.electricityDayRateP : extracted.electricityNightRateP) ?? 0;
-  const standing = ((extracted.electricityStandingPPerDay ?? 0) / 100) * 365;
-  return (totalKwh * (unitP / 100)) + standing;
-}
-
 function formatGBP(g?: number) {
   if (g == null) return "—";
   return `£${g.toFixed(2)}`;
@@ -216,37 +152,27 @@ function percent(n?: number) {
   return `${(n * 100).toFixed(0)}%`;
 }
 
+function annualCostGBP(extracted: Extracted, provider: Pick<Provider, "dayP" | "nightP" | "standingPPerDay">): number | undefined {
+  const totalKwh = extracted.electricTotalKwh;
+  if (totalKwh == null || totalKwh <= 0) return undefined;
 
-type Provider = {
-  provider?: string;
-  providerName?: string;
-  providerCode?: string;
-  tariffName?: string;
-  dayP: number;
-  nightP?: number;
-  standingPPerDay: number;
-  estimatedAnnual?: number;
-};
+  // If we have day/night split, use it. Else assume all as day.
+  const dayKwh: number = extracted.electricDayKwh ?? totalKwh;
+  const nightKwh: number = extracted.electricNightKwh ?? 0;
 
-function annualCostGBP(extracted: Extracted, provider: Provider) {
-  const dayKwh = (extracted.electricDayKwh || 0);
-  const nightKwh = (extracted.electricNightKwh || 0);
-  const totalKwh =
-    extracted.electricTotalKwh != null ? extracted.electricTotalKwh : dayKwh + nightKwh;
-
-  const unitRateP = provider.dayP;
-  const energyCost = (totalKwh * unitRateP) / 100;
+  const dayCost = (dayKwh * provider.dayP) / 100;
+  const nightCost = (nightKwh * provider.nightP) / 100;
   const standing = (provider.standingPPerDay / 100) * 365;
-  return energyCost + standing;
+  return dayCost + nightCost + standing;
 }
 
 function currentAnnualCost(extracted: Extracted): number | undefined {
-  const dayP = (extracted.electricityDayRateP != null ? extracted.electricityDayRateP : extracted.electricityNightRateP);
-  const nightP = (extracted.electricityNightRateP != null ? extracted.electricityNightRateP : extracted.electricityDayRateP);
+  const dayP = extracted.electricityDayRateP ?? extracted.electricityNightRateP;
+  const nightP = extracted.electricityNightRateP ?? extracted.electricityDayRateP;
   const standing = extracted.electricityStandingPPerDay;
 
   if (dayP == null || nightP == null || standing == null) return undefined;
-  const provider: Provider = { provider: "You", providerCode: "YOU", dayP, nightP, standingPPerDay: standing };
+  const provider: Provider = { name: "You", dayP, nightP, standingPPerDay: standing };
   return annualCostGBP(extracted, provider);
 }
 
@@ -261,59 +187,30 @@ export default function VoltlyLanding() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [busy, setBusy] = useState(false);
-  
-  const [supabaseMsg, setSupabaseMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
-  const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(false);
-  const [providersError, setProvidersError] = useState<string | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
 
-  const regionCode = (extracted?.postcodeAlpha || "M").toUpperCase();
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
 
-  React.useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      const sb = supabaseClient;
-      if (!sb) {
-        setProvidersLoading(false);
-        setProvidersError(
-          "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel → Project Settings → Environment Variables."
-        );
-        return;
-      }
-
-      // No extracted bill yet → no need to load provider options
-      if (!extracted) {
-        setProviderOptions([]);
-        return;
-      }
-
-      setProvidersLoading(true);
-      setProvidersError(null);
-      try {
-        const opts = await fetchProviderOptionsFromSupabase(regionCode);
-        if (!cancelled) setProviderOptions(opts);
-      } catch (e: any) {
-        const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-        if (!cancelled) {
-          setProviderOptions([]);
-          setProvidersError("Could not load suppliers from Supabase. " + msg);
-        }
-      } finally {
-        if (!cancelled) setProvidersLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [extracted, regionCode]);
+  const providers: Provider[] = useMemo(
+    () => [
+      { name: "Octopus Energy", dayP: 27.1, nightP: 8.0, standingPPerDay: 46.0 },
+      { name: "E.ON Next", dayP: 28.1, nightP: 9.0, standingPPerDay: 48.5 },
+      { name: "EDF Energy", dayP: 28.4, nightP: 9.2, standingPPerDay: 49.0 },
+      { name: "So Energy", dayP: 28.3, nightP: 9.1, standingPPerDay: 49.5 },
+      { name: "OVO", dayP: 28.6, nightP: 9.4, standingPPerDay: 50.5 },
+      { name: "British Gas", dayP: 28.9, nightP: 9.5, standingPPerDay: 50.0 },
+      { name: "Shell Energy", dayP: 28.75, nightP: 9.6, standingPPerDay: 51.0 },
+      { name: "SSE", dayP: 28.95, nightP: 9.65, standingPPerDay: 50.8 },
+      { name: "Good Energy", dayP: 29.1, nightP: 9.9, standingPPerDay: 51.2 },
+      { name: "Scottish Power", dayP: 29.2, nightP: 9.8, standingPPerDay: 51.5 },
+      { name: "Utilita", dayP: 29.5, nightP: 10.1, standingPPerDay: 52.0 },
+      { name: "Utility Warehouse", dayP: 29.3, nightP: 10.0, standingPPerDay: 52.5 },
+    ],
+    []
+  );
 
   const nightShare = useMemo(() => {
     if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
@@ -324,53 +221,17 @@ export default function VoltlyLanding() {
   const currentAnnual = useMemo(() => (extracted ? currentAnnualCost(extracted) : undefined), [extracted]);
 
   const providerQuotes = useMemo(() => {
-  if (!extracted) return [];
-  if (!providerOptions.length) return [];
-
-  // For this MVP, we assume a single electricity unit rate per kWh (no separate night rate in DB).
-  // If the uploaded bill includes day/night usage, we apply the same unit rate to both.
-  const currentAnnual = annualFromExtracted(extracted);
-
-  // Find the best (cheapest) tariff per provider
-  const bestByProvider = new Map<string, { option: ProviderOption; annual: number }>();
-
-  for (const option of providerOptions) {
-    const annual = annualCostGBP(extracted, {
-      provider: option.providerName,
-      providerCode: option.providerCode,
-      dayP: option.unitRateP,
-      nightP: option.unitRateP,
-      standingPPerDay: option.standingPPerDay,
-      estimatedAnnual: 0,
-    });
-
-    const prev = bestByProvider.get(option.providerId);
-    if (!prev || annual < prev.annual) bestByProvider.set(option.providerId, { option, annual });
-  }
-
-  const rows = Array.from(bestByProvider.values())
-    .map(({ option, annual }) => {
-      const delta = annual - currentAnnual;
-      const cheaper = delta < 0;
-      return {
-        id: option.providerId + ":" + option.tariffId,
-        providerId: option.providerId,
-        provider: option.providerName,
-        providerCode: option.providerCode,
-        tariffId: option.tariffId,
-        tariffName: option.tariffName,
-        dayP: option.unitRateP,
-        nightP: option.unitRateP,
-        standingPPerDay: option.standingPPerDay,
-        estimatedAnnual: annual,
-        delta,
-        cheaper,
-      };
-    })
-    .sort((a, b) => a.estimatedAnnual - b.estimatedAnnual);
-
-  return rows;
-}, [extracted, providerOptions]);
+    if (!extracted) return [];
+    const current = currentAnnualCost(extracted);
+    return providers
+      .map((p) => {
+        const annual = annualCostGBP(extracted, p);
+        const delta = current != null && annual != null ? annual - current : undefined;
+        return { p, annual, delta };
+      })
+      .filter((x) => x.annual != null)
+      .sort((a, b) => (a.annual! - b.annual!));
+  }, [extracted, providers]);
 
   const onPick = () => fileRef.current?.click();
 
@@ -647,173 +508,90 @@ export default function VoltlyLanding() {
                   </div>
 
                   <aside className="min-h-0 border-t border-slate-200 bg-white md:border-l md:border-t-0">
-                    <div className="flex h-full min-h-0 flex-col">
-                      <div className="border-b border-slate-200 p-4">
-                        <div className="flex items-center justify-between gap-2">
+                      <div className="flex h-full flex-col">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
                           <div>
                             <div className="text-sm font-semibold">Compare against</div>
-                            <div className="mt-1 text-xs text-slate-500">Pick a supplier — sorted by estimated annual cost. (Region: {regionCode})
-                    {supabaseMsg ? (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        {supabaseMsg}
-                      </div>
-                    ) : null}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Choose a supplier (cheapest first) for region <span className="font-medium">{regionCode}</span>.
+                            </div>
                           </div>
-                          {selectedProvider ? (
-                            <button className="text-xs font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedProvider(null)}>
-                              Clear
-                            </button>
-                          ) : null}
                         </div>
-                      </div>
 
-                      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                        {!extracted ? (
-                          <div className="text-sm text-slate-600">Upload a bill to enable comparisons.</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {providersLoading ? (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-    Loading suppliers…
-  </div>
-) : providersError ? (
-  <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-    {providersError}
-  </div>
-) : providerQuotes.length === 0 ? (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-    No suppliers found for region {regionCode}.
-  </div>
-) : (
-  providerQuotes.map((row) => {
-                              const active = selectedProvider?.providerId === row.providerId;
-                              const d = deltaLabel(row.delta);
-                              return (
-                                <button
-                                  key={row.id}
-                                  onClick={() =>
-                                    setSelectedProvider({
-                                      providerId: row.providerId,
-                                      providerCode: row.providerCode,
-                                      provider: row.provider,
-                                      dayP: row.dayP,
-                                      nightP: row.nightP,
-                                      standingPPerDay: row.standingPPerDay,
-                                      tariffName: row.tariffName,
-                                      tariffId: row.tariffId,
-                                      estimatedAnnual: row.estimatedAnnual,
-                                    })
-                                  }
-                                  className={[
-                                    "w-full rounded-2xl border p-4 text-left transition",
-                                    active
-                                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                                      : "border-slate-200 bg-white hover:bg-slate-50",
-                                  ].join(" ")}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                      <div className="text-sm font-semibold">{row.provider}</div>
-                                      <div
-                                        className={[
-                                          "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                                          d.kind === "good"
-                                            ? active
-                                              ? "bg-emerald-500/20 text-white"
-                                              : "bg-emerald-100 text-emerald-800"
-                                            : d.kind === "bad"
-                                            ? active
-                                              ? "bg-rose-500/20 text-white"
-                                              : "bg-rose-100 text-rose-800"
-                                            : active
-                                            ? "bg-white/20 text-white"
-                                            : "bg-slate-100 text-slate-700",
-                                        ].join(" ")}
-                                      >
-                                        {d.label}
-                                      </div>
-                                    </div>
+                        <div className="min-h-0 flex-1 overflow-auto p-4">
+                          {providersLoading ? (
+                            <div className="text-sm text-slate-600">Loading suppliers…</div>
+                          ) : providersError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                              {providersError}
+                            </div>
+                          ) : !extracted ? (
+                            <div className="text-sm text-slate-600">Upload a bill first to calculate comparisons.</div>
+                          ) : providerQuotes.length === 0 ? (
+                            <div className="text-sm text-slate-600">
+                              No suppliers found for region <span className="font-medium">{regionCode}</span>.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {providerQuotes.map((q) => {
+                                const active = selectedProvider?.providerId === q.providerId;
+                                const d = deltaLabel(q.delta);
 
-                                    <div className="text-right">
-                                      <div className="text-xs text-slate-500">Est. annual</div>
-                                      <div className="text-sm font-semibold">
-                                        {formatGBP(row.estimatedAnnual)}
-                                      </div>
-                                    </div>
-                                  </div>
+                                const pillClass =
+                                  d.kind === "good"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : d.kind === "bad"
+                                    ? "bg-rose-50 text-rose-800 border-rose-200"
+                                    : "bg-slate-50 text-slate-700 border-slate-200";
 
-                                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                                    <div className={active ? "text-white/80" : "text-slate-600"}>
-                                      Unit: {formatPence(row.dayP)}
-                                    </div>
-                                    <div className={active ? "text-white/80" : "text-slate-600"}>
-                                      Standing: {formatPence(row.standingPPerDay)}/day
-                                    </div>
-                                    <div className={active ? "text-white/80" : "text-slate-600"}>
-                                      Tariff: {row.tariffName}
-                                    </div>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="shrink-0 border-t border-slate-200 bg-white p-4">
-                        {!selectedProvider || !extracted ? (
-                          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-600">Select a supplier to see the comparison here.</div>
-                        ) : (
-                          (() => {
-                            const other = annualCostGBP(extracted!, selectedProvider);
-                            const delta = currentAnnual != null && other != null ? other - currentAnnual : undefined;
-                            const d = deltaLabel(delta);
-                            const cheaper = d.kind === "good";
-                            const more = d.kind === "bad";
-
-                            return (
-                              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <div className="text-sm font-semibold">Estimated annual comparison</div>
-                                    <div className="mt-1 text-xs text-slate-600">Demo uses mock supplier rates for now.</div>
-                                  </div>
-                                  <span
+                                return (
+                                  <button
+                                    key={q.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const found = providers.find((p) => p.providerId === q.providerId) || null;
+                                      setSelectedProvider(found);
+                                    }}
                                     className={[
-                                      "rounded-full px-2 py-1 text-xs font-semibold",
-                                      cheaper ? "bg-emerald-100 text-emerald-900" : more ? "bg-rose-100 text-rose-900" : "bg-white text-slate-700",
+                                      "w-full rounded-2xl border p-3 text-left transition",
+                                      active ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:bg-slate-50",
                                     ].join(" ")}
                                   >
-                                    {d.label}
-                                  </span>
-                                </div>
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="truncate text-sm font-semibold">{q.provider}</div>
+                                        <div className="truncate text-xs text-slate-500">{q.tariffName}</div>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-1">
+                                        <div className={["rounded-full border px-2.5 py-1 text-xs font-semibold", pillClass].join(" ")}>
+                                          {formatGBP(q.estimatedAnnual)} / yr
+                                        </div>
+                                        <div className="text-xs text-slate-500">{d.label}</div>
+                                      </div>
+                                    </div>
 
-                                <div className="mt-3 grid gap-2">
-                                  <div className="flex items-center justify-between rounded-xl bg-white p-3">
-                                    <div className="text-xs text-slate-600">You (from bill)</div>
-                                    <div className="text-sm font-semibold">{formatGBP(currentAnnual)}</div>
-                                  </div>
-                                  <div className="flex items-center justify-between rounded-xl bg-white p-3">
-                                    <div className="text-xs text-slate-600">{selectedProvider.name}</div>
-                                    <div className="text-sm font-semibold">{formatGBP(other)}</div>
-                                  </div>
-                                </div>
-
-                                <div
-                                  className={[
-                                    "mt-2 rounded-xl border p-3 text-sm",
-                                    cheaper ? "border-emerald-200 bg-emerald-50 text-emerald-900" : more ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-white text-slate-700",
-                                  ].join(" ")}
-                                >
-                                  {cheaper ? "Cheaper than your current estimate." : more ? "More expensive than your current estimate." : "—"}
-                                </div>
-                              </div>
-                            );
-                          })()
-                        )}
+                                    <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
+                                      <div className="rounded-lg bg-white p-2">
+                                        <div className="font-semibold text-slate-500">Unit</div>
+                                        <div className="mt-0.5 font-medium">{formatPence(q.dayP)}</div>
+                                      </div>
+                                      <div className="rounded-lg bg-white p-2">
+                                        <div className="font-semibold text-slate-500">Standing</div>
+                                        <div className="mt-0.5 font-medium">{formatPence(q.standingPPerDay)} / day</div>
+                                      </div>
+                                      <div className="rounded-lg bg-white p-2">
+                                        <div className="font-semibold text-slate-500">Fuel</div>
+                                        <div className="mt-0.5 font-medium">Electric</div>
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </aside>
+                    </aside>
                 </div>
               </div>
             </div>

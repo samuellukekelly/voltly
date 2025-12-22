@@ -1,6 +1,6 @@
 {
   "name": "voltly",
-  "version": "0.1.26-supabase.13",
+  "version": "0.1.26-supabase.20",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,7 +14,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "pdfjs-dist": "^4.10.38",
-    "@supabase/supabase-js": "^2.49.1"
+    "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
