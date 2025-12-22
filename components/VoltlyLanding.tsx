@@ -216,6 +216,18 @@ function percent(n?: number) {
   return `${(n * 100).toFixed(0)}%`;
 }
 
+
+type Provider = {
+  provider?: string;
+  providerName?: string;
+  providerCode?: string;
+  tariffName?: string;
+  dayP: number;
+  nightP?: number;
+  standingPPerDay: number;
+  estimatedAnnual?: number;
+};
+
 function annualCostGBP(extracted: Extracted, provider: Provider) {
   const dayKwh = (extracted.electricDayKwh || 0);
   const nightKwh = (extracted.electricNightKwh || 0);
