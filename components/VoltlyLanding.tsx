@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabaseClient";
+import { supabase as supabaseClient } from "../lib/supabaseClient";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
@@ -49,12 +48,12 @@ type ProviderOption = {
 };
 
 async function fetchProviderOptionsFromSupabase(regionCode: string): Promise<ProviderOption[]> {
-  const supabase = getSupabaseClient();
-  if (!supabase) throw new Error("Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+  const sb = supabaseClient;
+  if (!sb) throw new Error("Missing Supabase env vars. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
 
   // Pull only suppliers that have at least one tariff rate row in the region:
   // tariff_rates (region_code=...) -> tariffs -> providers
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("tariff_rates")
     .select(
       `
@@ -108,23 +107,6 @@ async function fetchProviderOptionsFromSupabase(regionCode: string): Promise<Pro
     } as ProviderOption;
   }).filter((x) => x.providerId && x.tariffId && Number.isFinite(x.unitRateP) && Number.isFinite(x.standingPPerDay));
 }
-
-type Provider = {
-  name: string;
-  dayP: number;
-  nightP: number;
-  standingPPerDay: number;
-};
-
-type ProviderOption = Provider & {
-  providerId: string | number;
-  providerCode?: string;
-  tariffId: string | number;
-  tariffName?: string;
-  tariffType?: string;
-  gasUnitRatePPerKwh?: number;
-  gasStandingChargePPerDay?: number;
-};
 
 function clampText(s: string, max = 900) {
   const t = s.replace(/\s+/g, " ").trim();
@@ -269,194 +251,63 @@ export default function VoltlyLanding() {
   const [busy, setBusy] = useState(false);
   
   const [supabaseMsg, setSupabaseMsg] = useState<string | null>(null);
-const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
   const [providerOptions, setProviderOptions] = useState<ProviderOption[]>([]);
   const [providersLoading, setProvidersLoading] = useState(false);
   const [providersError, setProvidersError] = useState<string | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
-
   const [selectedProvider, setSelectedProvider] = useState<ProviderOption | null>(null);
 
-  const [providers, setProviders] = useState<ProviderOption[]>([]);
-const [providersLoading, setProvidersLoading] = useState(false);
-const [providersError, setProvidersError] = useState<string | null>(null);
+  const regionCode = (extracted?.postcodeAlpha || "M").toUpperCase();
 
-const regionCode = (extracted?.postcodeAlpha || "M").toUpperCase();
+  React.useEffect(() => {
+    let cancelled = false;
 
-useEffect(() => {
-  if (!extracted) return;
-
-  let cancelled = false;
-
-  async function loadProvidersAndRates() {
-    const sb = supabase;
-    if (!sb) {
-      setProvidersLoading(false);
-      setProvidersError("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel → Project Settings → Environment Variables.");
-      return;
-    }
-
-    setProvidersLoading(true);
-    setProvidersError(null);
-
-    try {
-      const { data: provData, error: provErr } = await sb
-        .from("providers").select("id, provider_code, provider_name")
-        .order("provider_name", { ascending: true });
-
-      if (provErr) throw provErr;
-
-      const providersRaw = (provData ?? []) as any[];
-      if (!providersRaw.length) {
-        if (!cancelled) setProviders([]);
+    async function load() {
+      const sb = supabase;
+      if (!sb) {
+        setProvidersLoading(false);
+        setProvidersError(
+          "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel → Project Settings → Environment Variables."
+        );
         return;
       }
 
-      const providerIdField: "id" | "provider_id" | "provider_code" =
-        providersRaw[0]?.id != null
-          ? "id"
-          : providersRaw[0]?.provider_id != null
-          ? "provider_id"
-          : "provider_code";
-
-      const providerIds = providersRaw
-        .map((p) => p?.[providerIdField])
-        .filter((v) => v != null);
-
-      const { data: tariffData, error: tariffErr } = await sb
-        .from("tariffs")
-        .select("id, tariff_id, provider_id, tariff_name, tariff_type")
-        .in("provider_id", providerIds as any);
-
-      if (tariffErr) throw tariffErr;
-
-      const tariffsRaw = (tariffData ?? []) as any[];
-      if (!tariffsRaw.length) {
-        if (!cancelled) setProviders([]);
+      // No extracted bill yet → no need to load provider options
+      if (!extracted) {
+        setProviderOptions([]);
         return;
       }
 
-      const tariffIdField: "id" | "tariff_id" =
-        tariffsRaw[0]?.id != null ? "id" : "tariff_id";
-
-      const tariffIds = tariffsRaw
-        .map((t) => t?.[tariffIdField])
-        .filter((v) => v != null);
-
-      const { data: rateData, error: rateErr } = await sb
-        .from("tariff_rates")
-        .select(
-          "tariff_id, region_code, electricity_unit_rate_p_per_kwh, electricity_standing_charge_p_per_day, gas_unit_rate_p_per_kwh, gas_standing_charge_p_per_day"
-        )
-        .eq("region_code", regionCode)
-        .in("tariff_id", tariffIds as any);
-
-      if (rateErr) throw rateErr;
-
-      const ratesRaw = (rateData ?? []) as any[];
-      const rateByTariff = new Map<any, any>();
-      for (const r of ratesRaw) rateByTariff.set(r?.tariff_id, r);
-
-      const bestPerProvider: ProviderOption[] = [];
-
-      for (const p of providersRaw) {
-        const pid = p?.[providerIdField];
-        const providerName = p?.provider_name ?? "Unknown provider";
-
-        const providerTariffs = tariffsRaw.filter((t) => t?.provider_id === pid);
-
-        let best: ProviderOption | null = null;
-        let bestAnnual = Number.POSITIVE_INFINITY;
-
-        for (const t of providerTariffs) {
-          const tid = t?.[tariffIdField];
-          const rate = rateByTariff.get(tid);
-          if (!rate) continue;
-
-          const unitP = Number(rate?.electricity_unit_rate_p_per_kwh);
-          const standingP = Number(rate?.electricity_standing_charge_p_per_day);
-          if (!Number.isFinite(unitP) || !Number.isFinite(standingP)) continue;
-
-          const option: ProviderOption = {
-            providerId: pid,
-            providerCode: p?.provider_code,
-            tariffId: tid,
-            tariffName: t?.tariff_name,
-            tariffType: t?.tariff_type,
-            name: providerName,
-            dayP: unitP,
-            nightP: unitP,
-            standingPPerDay: standingP,
-            gasUnitRatePPerKwh: Number(rate?.gas_unit_rate_p_per_kwh) || undefined,
-            gasStandingChargePPerDay:
-              Number(rate?.gas_standing_charge_p_per_day) || undefined,
-          };
-
-          const annual = extracted ? annualCostGBP(extracted, option) : Number.POSITIVE_INFINITY;
-          if (annual < bestAnnual) {
-            bestAnnual = annual;
-            best = option;
-          }
+      setProvidersLoading(true);
+      setProvidersError(null);
+      try {
+        const opts = await fetchProviderOptionsFromSupabase(regionCode);
+        if (!cancelled) setProviderOptions(opts);
+      } catch (e: any) {
+        const msg = typeof e?.message === "string" ? e.message : "Unknown error";
+        if (!cancelled) {
+          setProviderOptions([]);
+          setProvidersError("Could not load suppliers from Supabase. " + msg);
         }
-
-        if (best) bestPerProvider.push(best);
+      } finally {
+        if (!cancelled) setProvidersLoading(false);
       }
-
-      bestPerProvider.sort(
-        (a, b) => (extracted ? annualCostGBP(extracted, a) : 0) - (extracted ? annualCostGBP(extracted, b) : 0)
-      );
-
-      if (!cancelled) setProviders(bestPerProvider);
-    } catch (e: any) {
-      const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-      if (!cancelled) {
-        setProviders([]);
-        setProvidersError("Could not load suppliers from Supabase. " + msg);
-      }
-    } finally {
-      if (!cancelled) setProvidersLoading(false);
     }
-  }
 
-  loadProvidersAndRates();
-
-  return () => {
-    cancelled = true;
-  };
-}, [extracted, regionCode]);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [extracted, regionCode]);
 
   const nightShare = useMemo(() => {
     if (!extracted?.electricNightKwh || !extracted?.electricTotalKwh) return undefined;
     if (extracted.electricTotalKwh <= 0) return undefined;
     return extracted.electricNightKwh / extracted.electricTotalKwh;
   }, [extracted]);
-
-  const regionCode = extracted?.postcodeAlpha || "M";
-  
-  React.useEffect(() => {
-    let alive = true;
-    async function run() {
-      if (!open || !extracted) return;
-      setProvidersLoading(true);
-      setProvidersError(null);
-      try {
-        const opts = await fetchProviderOptionsFromSupabase(regionCode);
-        if (!alive) return;
-        setProviderOptions(opts);
-      } catch (e: any) {
-        const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-        if (!alive) return;
-        setProvidersError(msg);
-        setProviderOptions([]);
-      } finally {
-        if (alive) setProvidersLoading(false);
-      }
-    }
-    run();
-    return () => { alive = false; };
-  }, [open, extracted, regionCode]);
 
   const currentAnnual = useMemo(() => (extracted ? currentAnnualCost(extracted) : undefined), [extracted]);
 
