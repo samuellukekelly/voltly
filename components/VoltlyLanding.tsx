@@ -159,7 +159,15 @@ function numFromMatch(m?: RegExpMatchArray | null) {
 
 function parseVoltlyFromText(text: string): Extracted {
   const notes: string[] = [];
-  const t = text;
+  // Normalise common PDF text quirks (non‑breaking spaces, split units like "k W h").
+  // This improves regex matching for kWh/£/p values extracted via pdf.js.
+  const t = String(text)
+    .replace(/\u00a0/g, " ")
+    .replace(/k\s*w\s*h/gi, "kWh")
+    .replace(/\s+/g, " ");
+
+  // Number capture used in several patterns (allows thousands separators).
+  const NUM = "([0-9][0-9,]*\\.?[0-9]*)";
 
   const supplier = /Octopus Energy/i.test(t) ? "Octopus Energy" : undefined;
   if (!supplier) notes.push("Supplier not confidently detected (parser optimised for Octopus-style bills).");
@@ -167,8 +175,8 @@ function parseVoltlyFromText(text: string): Extracted {
   const accountNumber = (t.match(/Your Account Number:\s*([A-Z0-9-]+)/i) || [])[1];
   const billReference = (t.match(/Bill Reference:\s*([0-9]+)/i) || [])[1];
 
-  const electricityEstimatedAnnualGBP = numFromMatch(t.match(/£\s*([0-9]+\.?[0-9]*)\s*a year for electricity/i));
-  const gasEstimatedAnnualGBP = numFromMatch(t.match(/£\s*([0-9]+\.?[0-9]*)\s*a year for gas/i));
+  const electricityEstimatedAnnualGBP = numFromMatch(t.match(new RegExp(`£\\s*${NUM}\\s*a year for electricity`, "i")));
+  const gasEstimatedAnnualGBP = numFromMatch(t.match(new RegExp(`£\\s*${NUM}\\s*a year for gas`, "i")));
 
   const period = (t.match(/Your energy account\s*([0-9]{1,2}[a-z]{2}\s+\w+\.?\s+\d{4}\s*-\s*[0-9]{1,2}[a-z]{2}\s+\w+\.?\s+\d{4})/i) || [])[1];
   const postcodeAlpha = (t.match(/Postcode area alpha identifier:\s*([A-Z]+)/i) || [])[1];
@@ -177,27 +185,27 @@ function parseVoltlyFromText(text: string): Extracted {
   const paymentMethod = (t.match(/Payment Method\s*([A-Za-z\s-]+)/i) || [])[1]?.trim();
 
   const electricityDayRateP =
-    numFromMatch(t.match(/Unit Rate\s*\(Day\)\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh/i)) ??
-    numFromMatch(t.match(/Electricity\s*Unit Rate\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh/i)) ??
-    numFromMatch(t.match(/Unit Rate\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh[\s\S]{0,60}Electricity/i));
+    numFromMatch(t.match(new RegExp(`Unit Rate\\s*\\(Day\\)\\s*${NUM}p\\s*per\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Electricity\\s*Unit Rate\\s*${NUM}p\\s*per\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Unit Rate\\s*${NUM}p\\s*per\\s*kWh[\\s\\S]{0,60}Electricity`, "i")));
 
-  const electricityNightRateP = numFromMatch(t.match(/Unit Rate\s*\(Night\)\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh/i));
+  const electricityNightRateP = numFromMatch(t.match(new RegExp(`Unit Rate\\s*\\(Night\\)\\s*${NUM}p\\s*per\\s*kWh`, "i")));
   const electricityStandingPPerDay =
-    numFromMatch(t.match(/Electricity\s*Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day/i)) ??
-    numFromMatch(t.match(/Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day[\s\S]{0,60}Electricity/i)) ??
-    numFromMatch(t.match(/Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day/i));
+    numFromMatch(t.match(new RegExp(`Electricity\\s*Standing Charge\\s*${NUM}p\\s*\\/\\s*day`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Standing Charge\\s*${NUM}p\\s*\\/\\s*day[\\s\\S]{0,60}Electricity`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Standing Charge\\s*${NUM}p\\s*\\/\\s*day`, "i")));
 
   // Consumption (kWh) — try to capture totals, not "average daily".
   let electricNightKwh =
-    numFromMatch(t.match(/(?:Night\s*(?:consumption|usage)|Consumption\s*Night|Night\s*kWh)\s*[: ]\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
-    numFromMatch(t.match(/Night\s*([0-9]+\.?[0-9]*)\s*kWh/i));
+    numFromMatch(t.match(new RegExp(`(?:Night\\s*(?:consumption|usage)|Consumption\\s*Night|Night\\s*kWh)\\s*[: ]\\s*${NUM}\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Night\\s*${NUM}\\s*kWh`, "i")));
   let electricDayKwh =
-    numFromMatch(t.match(/(?:Day(?:time)?\s*(?:consumption|usage)|Consumption\s*Day|Day\s*kWh)\s*[: ]\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
-    numFromMatch(t.match(/Day\s*([0-9]+\.?[0-9]*)\s*kWh/i));
+    numFromMatch(t.match(new RegExp(`(?:Day(?:time)?\\s*(?:consumption|usage)|Consumption\\s*Day|Day\\s*kWh)\\s*[: ]\\s*${NUM}\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Day\\s*${NUM}\\s*kWh`, "i")));
 
   let electricTotalKwh =
-    numFromMatch(t.match(/Total\s*(?:electricity\s*)?consumption\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
-    numFromMatch(t.match(/Electricity\s*consumption\s*([0-9]+\.?[0-9]*)\s*kWh/i));
+    numFromMatch(t.match(new RegExp(`Total\\s*(?:electricity\\s*)?consumption\\s*${NUM}\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Electricity\\s*consumption\\s*${NUM}\\s*kWh`, "i")));
 
   if (!electricDayKwh || !electricNightKwh) {
     // Some bills present a rate+kWh table (e.g. "Day 28.11p 123 kWh £34.58").
@@ -211,7 +219,7 @@ function parseVoltlyFromText(text: string): Extracted {
     };
 
     // Labeled formats (day/night/off-peak)
-    for (const m of t.matchAll(/\b(Day|Night|Off[-\s]?peak|Peak)\b[\s\S]{0,40}?([0-9]+\.?[0-9]*)\s*p(?:\s*per\s*kWh)?[\s\S]{0,40}?([0-9]+\.?[0-9]*)\s*kWh/gi)) {
+    for (const m of t.matchAll(new RegExp(`\\b(Day|Night|Off[-\\s]?peak|Peak)\\b[\\s\\S]{0,60}?${NUM}\\s*p(?:\\s*per\\s*kWh)?[\\s\\S]{0,60}?${NUM}\\s*kWh`, "gi"))) {
       const rawLabel = (m[1] || "").toLowerCase();
       const label = rawLabel.includes("night") || rawLabel.includes("off") ? "night" : rawLabel.includes("day") || rawLabel.includes("peak") ? "day" : undefined;
       const rateP = numFromMatch([m[2]]);
@@ -220,7 +228,7 @@ function parseVoltlyFromText(text: string): Extracted {
     }
 
     // Unlabeled "rate then kWh" pairs; try to infer label from nearby words.
-    for (const m of t.matchAll(/([0-9]+\.?[0-9]*)\s*p(?:\s*per\s*kWh)?[\s\S]{0,25}?([0-9]+\.?[0-9]*)\s*kWh/gi)) {
+    for (const m of t.matchAll(new RegExp(`${NUM}\\s*p(?:\\s*per\\s*kWh)?[\\s\\S]{0,40}?${NUM}\\s*kWh`, "gi"))) {
       const rateP = numFromMatch([m[1]]);
       const kwh = numFromMatch([m[2]]);
       const aroundStart = Math.max(0, m.index! - 30);
@@ -262,17 +270,17 @@ function parseVoltlyFromText(text: string): Extracted {
 
   // Gas (best-effort)
   const gasUnitRateP =
-    numFromMatch(t.match(/Gas\s*Unit Rate\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh/i)) ??
-    numFromMatch(t.match(/Unit Rate\s*\(Gas\)\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh/i)) ??
-    numFromMatch(t.match(/Unit Rate\s*([0-9]+\.?[0-9]*)p\s*per\s*kWh[\s\S]{0,60}Gas/i));
+    numFromMatch(t.match(new RegExp(`Gas\\s*Unit Rate\\s*${NUM}p\\s*per\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Unit Rate\\s*\\(Gas\\)\\s*${NUM}p\\s*per\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Unit Rate\\s*${NUM}p\\s*per\\s*kWh[\\s\\S]{0,60}Gas`, "i")));
 
   const gasStandingPPerDay =
-    numFromMatch(t.match(/Gas\s*Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day/i)) ??
-    numFromMatch(t.match(/Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day[\s\S]{0,60}Gas/i));
+    numFromMatch(t.match(new RegExp(`Gas\\s*Standing Charge\\s*${NUM}p\\s*\\/\\s*day`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Standing Charge\\s*${NUM}p\\s*\\/\\s*day[\\s\\S]{0,60}Gas`, "i")));
 
   const gasTotalKwh =
-    numFromMatch(t.match(/Total\s*gas\s*(?:consumption|usage)\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
-    numFromMatch(t.match(/Gas\s*(?:consumption|usage)\s*([0-9]+\.?[0-9]*)\s*kWh/i));
+    numFromMatch(t.match(new RegExp(`Total\\s*gas\\s*(?:consumption|usage)\\s*${NUM}\\s*kWh`, "i"))) ??
+    numFromMatch(t.match(new RegExp(`Gas\\s*(?:consumption|usage)\\s*${NUM}\\s*kWh`, "i")));
 
   const periodDays = parsePeriodDays(period);
 
@@ -1051,6 +1059,67 @@ return compareRows.map((r) => {
                   ) : null}
                 </div>
 
+                {/* Tariffs first: keeps the interesting bit (rates) visible without scrolling past the supplier list */}
+                {selectedProviderCode ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">Tariffs</div>
+                        <div className="mt-1 text-xs text-slate-500">Sorted cheapest first (estimated cost for your bill period usage).</div>
+                      </div>
+                      <button
+                        className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                        onClick={() => setSelectedProviderCode(null)}
+                      >
+                        Change supplier
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 max-h-[60vh] overflow-y-auto pr-1">
+                      {selectedProviderQuotes.map((q) => {
+                        const total = q.estimatedAnnualTotalGBP ?? null;
+                        const base = bestOverall?.estimatedAnnualTotalGBP ?? null;
+                        const delta = total != null && base != null ? total - base : null;
+                        const pill = deltaPill(delta);
+                        const pillCls =
+                          pill.kind === "good"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : pill.kind === "bad"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-slate-100 text-slate-700";
+
+                        return (
+                          <div key={`${q.providerCode}:${q.tariffName}`} className="rounded-xl border border-slate-200 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-semibold">{q.tariffName}</div>
+                                <div className="mt-1 text-xs text-slate-500">{q.tariffType ? q.tariffType : "Tariff"} • Region {q.regionCode}</div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="text-sm font-semibold">{formatGBP(total)}</div>
+                                <span className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold " + pillCls}>{pill.label}</span>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                              <div className="rounded-lg bg-slate-50 p-2">
+                                <div className="font-semibold text-slate-700">Electricity</div>
+                                <div className="mt-1">Unit: {q.electricityUnitRateP != null ? `${q.electricityUnitRateP.toFixed(2)}p/kWh` : "—"}</div>
+                                <div className="mt-0.5">Standing: {q.electricityStandingPPerDay != null ? `${q.electricityStandingPPerDay.toFixed(2)}p/day` : "—"}</div>
+                              </div>
+                              <div className="rounded-lg bg-slate-50 p-2">
+                                <div className="font-semibold text-slate-700">Gas</div>
+                                <div className="mt-1">Unit: {q.gasUnitRateP != null ? `${q.gasUnitRateP.toFixed(2)}p/kWh` : "—"}</div>
+                                <div className="mt-0.5">Standing: {q.gasStandingPPerDay != null ? `${q.gasStandingPPerDay.toFixed(2)}p/day` : "—"}</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="mt-4 grid gap-3 lg:grid-cols-1">
                   {providersLoading ? (
                     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading suppliers…</div>
@@ -1117,87 +1186,12 @@ return compareRows.map((r) => {
                   )}
                 </div>
 
-                {/* Selected provider detail */}
-                {selectedProviderCode && (
-                  <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold">Tariffs</div>
-                        <div className="mt-1 text-xs text-slate-500">Sorted cheapest first (estimated cost for your bill period usage).</div>
-                      </div>
-                      <button
-                        className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-                        onClick={() => setSelectedProviderCode(null)}
-                      >
-                        Clear
-                      </button>
-                    </div>
-
-                    <div className="mt-3 grid gap-3">
-                      {selectedProviderQuotes.map((q) => {
-                        const total = q.estimatedAnnualTotalGBP ?? null;
-                        const base = bestOverall?.estimatedAnnualTotalGBP ?? null;
-                        const delta = total != null && base != null ? total - base : null;
-                        const pill = deltaPill(delta);
-                        const pillCls =
-                          pill.kind === "good"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : pill.kind === "bad"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-slate-100 text-slate-700";
-
-                        return (
-                          <div key={`${q.providerCode}:${q.tariffName}`} className="rounded-xl border border-slate-200 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-semibold">{q.tariffName}</div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {q.tariffType ? q.tariffType : "Tariff"} • Region {q.regionCode}
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <div className="text-sm font-semibold">{formatGBP(total)}</div>
-                                <span className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold " + pillCls}>
-                                  {pill.label}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              <div className="rounded-lg bg-slate-50 p-2">
-                                <div className="text-[11px] font-semibold text-slate-500">Electric unit</div>
-                                <div className="text-sm font-medium">{formatPence(q.elecUnitP)}</div>
-                              </div>
-                              <div className="rounded-lg bg-slate-50 p-2">
-                                <div className="text-[11px] font-semibold text-slate-500">Electric standing</div>
-                                <div className="text-sm font-medium">{formatPence(q.elecStandingPPerDay)} / day</div>
-                              </div>
-                              <div className="rounded-lg bg-slate-50 p-2">
-                                <div className="text-[11px] font-semibold text-slate-500">Gas unit</div>
-                                <div className="text-sm font-medium">{formatPence(q.gasUnitP)}</div>
-                              </div>
-                              <div className="rounded-lg bg-slate-50 p-2">
-                                <div className="text-[11px] font-semibold text-slate-500">Gas standing</div>
-                                <div className="text-sm font-medium">{formatPence(q.gasStandingPPerDay)} / day</div>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 text-xs text-slate-500">
-                              Exit fees total: {formatGBP(q.exitFeesTotalGBP)}{q.lastUpdated ? ` • Updated ${q.lastUpdated}` : ""}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {extracted?.electricityNightRateP != null && extracted?.electricityDayRateP != null ? (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        Note: your bill looks like day/night (Economy 7). Supplier tariffs in your DB currently store a single electricity unit rate,
-                        so comparisons use your <span className="font-semibold">total kWh</span> at that unit rate (no day/night split).
-                      </div>
-                    ) : null}
+                {extracted?.electricityNightRateP != null && extracted?.electricityDayRateP != null ? (
+                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    Note: your bill looks like day/night (Economy 7). Supplier tariffs in your DB currently store a single electricity unit rate,
+                    so comparisons use your <span className="font-semibold">total kWh</span> at that unit rate (no day/night split).
                   </div>
-                )}
+                ) : null}
 	              </div>
 	                </div>
 	              </div>
