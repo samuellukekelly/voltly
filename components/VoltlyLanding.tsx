@@ -914,8 +914,9 @@ return compareRows.map((r) => {
                           const dayRate = extracted.electricityDayRateP ?? null;
                           const nightRate = extracted.electricityNightRateP ?? null;
                           const stand = extracted.electricityStandingPPerDay ?? null;
-                          const dayKwh = extracted.electricityDayKwh ?? null;
-                          const nightKwh = extracted.electricityNightKwh ?? null;
+                          // NOTE: kWh fields in Extracted are named `electric*Kwh` (not `electricity*Kwh`)
+                          const dayKwh = extracted.electricDayKwh ?? null;
+                          const nightKwh = extracted.electricNightKwh ?? null;
 
                           const rows: { label: string; rateP: number | null; kwh: number | null; cost: number | null }[] = [];
                           if (dayRate != null || dayKwh != null) {
