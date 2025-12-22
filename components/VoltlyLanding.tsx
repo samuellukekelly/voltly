@@ -200,8 +200,8 @@ function formatPence(p?: number) {
 function annualFromExtracted(extracted: Extracted) {
   // If bill provides estimated annual electric, prefer it. Otherwise approximate using extracted kWh and unit rates.
   if (extracted.electricityEstimatedAnnualGBP != null) return extracted.electricityEstimatedAnnualGBP;
-  const totalKwh = extracted.electricTotalKwh ?? ( (extracted.electricDayKwh ?? 0) + (extracted.electricNightKwh ?? 0) );
-  const unitP = extracted.electricityDayRateP ?? extracted.electricityNightRateP ?? 0;
+  const totalKwh = extracted.electricTotalKwh ?? ( ((extracted.electricDayKwh || 0)) + ((extracted.electricNightKwh || 0)) );
+  const unitP = (extracted.electricityDayRateP != null ? extracted.electricityDayRateP : extracted.electricityNightRateP) ?? 0;
   const standing = ((extracted.electricityStandingPPerDay ?? 0) / 100) * 365;
   return (totalKwh * (unitP / 100)) + standing;
 }
@@ -217,8 +217,8 @@ function percent(n?: number) {
 }
 
 function annualCostGBP(extracted: Extracted, provider: Provider) {
-  const dayKwh = extracted.electricDayKwh ?? 0;
-  const nightKwh = extracted.electricNightKwh ?? 0;
+  const dayKwh = (extracted.electricDayKwh || 0);
+  const nightKwh = (extracted.electricNightKwh || 0);
   const totalKwh =
     extracted.electricTotalKwh != null ? extracted.electricTotalKwh : dayKwh + nightKwh;
 
@@ -229,8 +229,8 @@ function annualCostGBP(extracted: Extracted, provider: Provider) {
 }
 
 function currentAnnualCost(extracted: Extracted): number | undefined {
-  const dayP = extracted.electricityDayRateP ?? extracted.electricityNightRateP;
-  const nightP = extracted.electricityNightRateP ?? extracted.electricityDayRateP;
+  const dayP = (extracted.electricityDayRateP != null ? extracted.electricityDayRateP : extracted.electricityNightRateP);
+  const nightP = (extracted.electricityNightRateP != null ? extracted.electricityNightRateP : extracted.electricityDayRateP);
   const standing = extracted.electricityStandingPPerDay;
 
   if (dayP == null || nightP == null || standing == null) return undefined;
