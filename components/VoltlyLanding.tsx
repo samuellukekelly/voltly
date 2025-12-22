@@ -845,7 +845,6 @@ export default function VoltlyLanding() {
               </div>
             </div>
           </div>
-        </div>
       )}
 
       <footer className="border-t border-slate-200 py-8">
