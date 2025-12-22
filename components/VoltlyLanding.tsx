@@ -172,7 +172,17 @@ function currentAnnualCost(extracted: Extracted): number | undefined {
   const standing = extracted.electricityStandingPPerDay;
 
   if (dayP == null || nightP == null || standing == null) return undefined;
-  const provider: Provider = { providerId: "YOU", providerCode: "YOU", provider: "You", dayP, nightP, standingPPerDay: standing };
+  const provider: Provider = {
+    providerId: "YOU",
+    providerCode: "YOU",
+    provider: "You",
+    tariffId: "YOU",
+    tariffName: "Your current tariff",
+    dayP,
+    nightP,
+    standingPPerDay: standing,
+    estimatedAnnual: 0,
+  };
   return annualCostGBP(extracted, provider);
 }
 
