@@ -339,8 +339,12 @@ export default function VoltlyLanding() {
     if (!extracted) return null;
 
     // If day/night is present, prefer total, else compute.
-    const totalKwh =
-      extracted.electricTotalKwh ??
+        const totalKwh = (() => {
+          const t = extracted?.electricTotalKwh;
+          if (t != null) return t;
+          const d = (extracted?.electricDayKwh || 0) + (extracted?.electricNightKwh || 0);
+          return d || null;
+        })();
       ((extracted.electricDayKwh || 0) + (extracted.electricNightKwh || 0)) ||
       null;
 
@@ -368,8 +372,12 @@ export default function VoltlyLanding() {
   const quotes: Quote[] = useMemo(() => {
     if (!extracted) return [];
 
-    const totalElecKwh =
-      extracted.electricTotalKwh ??
+        const totalElecKwh = (() => {
+          const t = extracted?.electricTotalKwh;
+          if (t != null) return t;
+          const d = (extracted?.electricDayKwh || 0) + (extracted?.electricNightKwh || 0);
+          return d || null;
+        })();
       ((extracted.electricDayKwh || 0) + (extracted.electricNightKwh || 0)) ||
       null;
 
