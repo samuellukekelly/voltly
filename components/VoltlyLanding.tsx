@@ -672,6 +672,11 @@ return compareRows.map((r) => {
   }, [quotes]);
 
   const [selectedProviderCode, setSelectedProviderCode] = useState<string | null>(null);
+  const selectedProvider = useMemo(() => {
+    if (!selectedProviderCode) return null;
+    return providerSummaries.find((p) => p.providerCode === selectedProviderCode) ?? null;
+  }, [providerSummaries, selectedProviderCode]);
+
   const selectedProviderQuotes = useMemo(() => {
     if (!selectedProviderCode) return [];
     return quotes
