@@ -1,12 +1,18 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+let cached: SupabaseClient | null = null;
 
-/**
- * Client-side Supabase client.
- * We return null if env vars are missing so the UI can show a friendly message
- * instead of crashing the build/prerender.
- */
-export const supabase =
-  url && anon ? createClient(url, anon, { auth: { persistSession: false } }) : null;
+export function getSupabaseClient(): SupabaseClient | null {
+  if (cached) return cached;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Do NOT throw (would break prerender/build). Show UI error instead.
+  if (!url || !anon) return null;
+
+  cached = createClient(url, anon, {
+    auth: { persistSession: false },
+  });
+  return cached;
+}

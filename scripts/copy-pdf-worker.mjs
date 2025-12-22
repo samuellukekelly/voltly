@@ -1,21 +1,23 @@
-import { mkdirSync, copyFileSync, existsSync } from "node:fs";
-import { dirname } from "node:path";
+import fs from "node:fs";
+import path from "node:path";
+
+const destDir = path.join(process.cwd(), "public");
+const dest = path.join(destDir, "pdf.worker.min.mjs");
 
 const candidates = [
-  "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs",
-  "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
-  "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.js",
-  "node_modules/pdfjs-dist/build/pdf.worker.min.js",
+  path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"),
+  path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"),
+  path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.js"),
+  path.join(process.cwd(), "node_modules/pdfjs-dist/build/pdf.worker.min.js"),
 ];
 
-const dest = "public/pdf.worker.min.mjs";
-mkdirSync(dirname(dest), { recursive: true });
+fs.mkdirSync(destDir, { recursive: true });
 
-const src = candidates.find((p) => existsSync(p));
-if (!src) {
-  console.error("pdf.js worker not found. Tried:", candidates);
+const found = candidates.find((p) => fs.existsSync(p));
+if (!found) {
+  console.warn("pdf.js worker not found at any known path. Checked:", candidates);
   process.exit(0);
 }
 
-copyFileSync(src, dest);
-console.log("Copied PDF.js worker to", dest, "from", src);
+fs.copyFileSync(found, dest);
+console.log(`Copied PDF.js worker to public/${path.basename(dest)} from ${path.relative(process.cwd(), found)}`);
