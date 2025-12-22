@@ -278,7 +278,7 @@ export default function VoltlyLanding() {
     let cancelled = false;
 
     async function load() {
-      const sb = supabase;
+      const sb = supabaseClient;
       if (!sb) {
         setProvidersLoading(false);
         setProvidersError(
