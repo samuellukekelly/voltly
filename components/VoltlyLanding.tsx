@@ -188,10 +188,10 @@ function parseVoltlyFromText(text: string): Extracted {
     numFromMatch(t.match(/Standing Charge\s*([0-9]+\.?[0-9]*)p\s*\/\s*day/i));
 
   // Consumption (kWh) — try to capture totals, not "average daily".
-  const electricNightKwh =
+  let electricNightKwh =
     numFromMatch(t.match(/(?:Night\s*(?:consumption|usage)|Consumption\s*Night|Night\s*kWh)\s*[: ]\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
     numFromMatch(t.match(/Night\s*([0-9]+\.?[0-9]*)\s*kWh/i));
-  const electricDayKwh =
+  let electricDayKwh =
     numFromMatch(t.match(/(?:Day(?:time)?\s*(?:consumption|usage)|Consumption\s*Day|Day\s*kWh)\s*[: ]\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
     numFromMatch(t.match(/Day\s*([0-9]+\.?[0-9]*)\s*kWh/i));
 
@@ -199,8 +199,65 @@ function parseVoltlyFromText(text: string): Extracted {
     numFromMatch(t.match(/Total\s*(?:electricity\s*)?consumption\s*([0-9]+\.?[0-9]*)\s*kWh/i)) ??
     numFromMatch(t.match(/Electricity\s*consumption\s*([0-9]+\.?[0-9]*)\s*kWh/i));
 
-  if (!electricTotalKwh && (electricDayKwh || electricNightKwh)) {
-    electricTotalKwh = (electricDayKwh || 0) + (electricNightKwh || 0);
+  if (!electricDayKwh || !electricNightKwh) {
+    // Some bills present a rate+kWh table (e.g. "Day 28.11p 123 kWh £34.58").
+    // We'll pull table-like rows and match kWh to the detected day/night rates.
+    type RateRow = { label?: "day" | "night"; rateP?: number; kwh?: number };
+    const rows: RateRow[] = [];
+
+    const pushRow = (label: "day" | "night" | undefined, rateP: number | undefined, kwh: number | undefined) => {
+      if (!rateP && !kwh) return;
+      rows.push({ label, rateP, kwh });
+    };
+
+    // Labeled formats (day/night/off-peak)
+    for (const m of t.matchAll(/\b(Day|Night|Off[-\s]?peak|Peak)\b[\s\S]{0,40}?([0-9]+\.?[0-9]*)\s*p(?:\s*per\s*kWh)?[\s\S]{0,40}?([0-9]+\.?[0-9]*)\s*kWh/gi)) {
+      const rawLabel = (m[1] || "").toLowerCase();
+      const label = rawLabel.includes("night") || rawLabel.includes("off") ? "night" : rawLabel.includes("day") || rawLabel.includes("peak") ? "day" : undefined;
+      const rateP = numFromMatch([m[2]]);
+      const kwh = numFromMatch([m[3]]);
+      pushRow(label as any, rateP ?? undefined, kwh ?? undefined);
+    }
+
+    // Unlabeled "rate then kWh" pairs; try to infer label from nearby words.
+    for (const m of t.matchAll(/([0-9]+\.?[0-9]*)\s*p(?:\s*per\s*kWh)?[\s\S]{0,25}?([0-9]+\.?[0-9]*)\s*kWh/gi)) {
+      const rateP = numFromMatch([m[1]]);
+      const kwh = numFromMatch([m[2]]);
+      const aroundStart = Math.max(0, m.index! - 30);
+      const aroundEnd = Math.min(t.length, m.index! + (m[0]?.length || 0) + 30);
+      const around = t.slice(aroundStart, aroundEnd).toLowerCase();
+      let label: "day" | "night" | undefined = undefined;
+      if (around.includes("night") || around.includes("off-peak") || around.includes("off peak")) label = "night";
+      if (around.includes("day") || around.includes("peak")) label = "day";
+      pushRow(label, rateP ?? undefined, kwh ?? undefined);
+    }
+
+    const matchByRate = (targetRateP?: number | null, preferredLabel?: "day" | "night") => {
+      if (!targetRateP) return null;
+      let best: { row: RateRow; score: number } | null = null;
+      for (const r of rows) {
+        if (r.kwh == null || r.rateP == null) continue;
+        // score: rate closeness + label bonus
+        const d = Math.abs(r.rateP - targetRateP);
+        let score = d;
+        if (preferredLabel && r.label === preferredLabel) score -= 0.2;
+        if (best == null || score < best.score) best = { row: r, score };
+      }
+      return best?.row ?? null;
+    };
+
+    if (!electricDayKwh && electricityDayRateP) {
+      const r = matchByRate(electricityDayRateP, "day") || rows.find((x) => x.label === "day" && x.kwh != null);
+      if (r?.kwh != null) electricDayKwh = r.kwh;
+    }
+    if (!electricNightKwh && electricityNightRateP) {
+      const r = matchByRate(electricityNightRateP, "night") || rows.find((x) => x.label === "night" && x.kwh != null);
+      if (r?.kwh != null) electricNightKwh = r.kwh;
+    }
+
+    if (!electricTotalKwh && (electricDayKwh || electricNightKwh)) {
+      electricTotalKwh = (electricDayKwh || 0) + (electricNightKwh || 0);
+    }
   }
 
   // Gas (best-effort)
@@ -843,6 +900,78 @@ return compareRows.map((r) => {
                         </div>
                       </div>
 
+                      {/* Breakdown by rate (mirrors bill table) */}
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">Breakdown by rate</div>
+                            <div className="mt-1 text-xs text-slate-500">Uses the consumption detected from your bill and your current unit rates.</div>
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const days = extracted.periodDays ?? null;
+                          const dayRate = extracted.electricityDayRateP ?? null;
+                          const nightRate = extracted.electricityNightRateP ?? null;
+                          const stand = extracted.electricityStandingPPerDay ?? null;
+                          const dayKwh = extracted.electricityDayKwh ?? null;
+                          const nightKwh = extracted.electricityNightKwh ?? null;
+
+                          const rows: { label: string; rateP: number | null; kwh: number | null; cost: number | null }[] = [];
+                          if (dayRate != null || dayKwh != null) {
+                            const cost = dayRate != null && dayKwh != null ? (dayRate / 100) * dayKwh : null;
+                            rows.push({ label: "Day", rateP: dayRate, kwh: dayKwh, cost });
+                          }
+                          if (nightRate != null || nightKwh != null) {
+                            const cost = nightRate != null && nightKwh != null ? (nightRate / 100) * nightKwh : null;
+                            rows.push({ label: "Night", rateP: nightRate, kwh: nightKwh, cost });
+                          }
+                          if (rows.length === 0) return <div className="mt-3 text-sm text-slate-600">No rate/consumption breakdown detected yet.</div>;
+
+                          const standingCost = stand != null && days != null ? (stand / 100) * days : null;
+                          const unitCost = rows.reduce((a, r) => a + (r.cost ?? 0), 0);
+                          const total = (standingCost != null ? unitCost + standingCost : null);
+
+                          return (
+                            <div className="mt-3">
+                              <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                                  <div>Rate</div>
+                                  <div className="text-right">Consumption</div>
+                                  <div className="text-right">Unit rate</div>
+                                  <div className="text-right">Cost</div>
+                                </div>
+
+                                {rows.map((r) => (
+                                  <div key={r.label} className="grid grid-cols-4 px-3 py-2 text-sm">
+                                    <div className="font-medium text-slate-700">{r.label}</div>
+                                    <div className="text-right text-slate-700">{r.kwh != null ? `${r.kwh} kWh` : "—"}</div>
+                                    <div className="text-right text-slate-700">{formatPence(r.rateP ?? undefined)}</div>
+                                    <div className="text-right font-medium text-slate-900">{formatGBP(r.cost)}</div>
+                                  </div>
+                                ))}
+
+                                <div className="grid grid-cols-4 bg-slate-50 px-3 py-2 text-sm">
+                                  <div className="font-medium text-slate-700">Standing charge</div>
+                                  <div className="text-right text-slate-700">{days != null ? `${days} days` : "—"}</div>
+                                  <div className="text-right text-slate-700">
+                                    {stand != null ? `${formatPence(stand)} / day` : "—"}
+                                  </div>
+                                  <div className="text-right font-medium text-slate-900">{formatGBP(standingCost)}</div>
+                                </div>
+
+                                <div className="grid grid-cols-4 px-3 py-2 text-sm">
+                                  <div className="font-semibold text-slate-900">Total</div>
+                                  <div />
+                                  <div />
+                                  <div className="text-right text-base font-semibold text-slate-900">{formatGBP(total)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
                       <div className="mt-6 border-t border-slate-200 pt-5">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
@@ -926,7 +1055,14 @@ return compareRows.map((r) => {
                       No supplier tariffs are currently available for region {regionCode}. Please try again later.
                     </div>
                   ) : (
-                    <div className="grid gap-3">
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                      <details className="group">
+                        <summary className="cursor-pointer list-none rounded-xl px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 flex items-center justify-between">
+                          <span>All suppliers{" "}{selectedProvider ? `• Selected: ${selectedProvider.providerName}` : ""}</span>
+                          <span className="text-xs font-semibold text-slate-500 group-open:rotate-180 transition-transform">▾</span>
+                        </summary>
+                        <div className="mt-2 max-h-80 overflow-y-auto pr-1">
+                          <div className="grid gap-2">
                       {providerSummaries.map((p) => {
                         const active = selectedProviderCode === p.providerCode;
                         const cheapest = p.cheapest;
@@ -968,6 +1104,9 @@ return compareRows.map((r) => {
                           </button>
                         );
                       })}
+                          </div>
+                        </div>
+                      </details>
                     </div>
                   )}
                 </div>
