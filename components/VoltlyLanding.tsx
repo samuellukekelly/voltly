@@ -1104,12 +1104,12 @@ return compareRows.map((r) => {
                             <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
                               <div className="rounded-lg bg-slate-50 p-2">
                                 <div className="font-semibold text-slate-700">Electricity</div>
-                                <div className="mt-1">Unit: {q.electricityUnitRateP != null ? `${q.electricityUnitRateP.toFixed(2)}p/kWh` : "—"}</div>
-                                <div className="mt-0.5">Standing: {q.electricityStandingPPerDay != null ? `${q.electricityStandingPPerDay.toFixed(2)}p/day` : "—"}</div>
+                                <div className="mt-1">Unit: {q.elecUnitP != null ? `${q.elecUnitP.toFixed(2)}p/kWh` : "—"}</div>
+                                <div className="mt-0.5">Standing: {q.elecStandingPPerDay != null ? `${q.elecStandingPPerDay.toFixed(2)}p/day` : "—"}</div>
                               </div>
                               <div className="rounded-lg bg-slate-50 p-2">
                                 <div className="font-semibold text-slate-700">Gas</div>
-                                <div className="mt-1">Unit: {q.gasUnitRateP != null ? `${q.gasUnitRateP.toFixed(2)}p/kWh` : "—"}</div>
+                                <div className="mt-1">Unit: {q.gasUnitP != null ? `${q.gasUnitP.toFixed(2)}p/kWh` : "—"}</div>
                                 <div className="mt-0.5">Standing: {q.gasStandingPPerDay != null ? `${q.gasStandingPPerDay.toFixed(2)}p/day` : "—"}</div>
                               </div>
                             </div>
