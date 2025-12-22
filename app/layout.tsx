@@ -1,9 +1,9 @@
-import "./globals.css";
 import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Voltly — Upload your bill. Compare tariffs.",
-  description: "Upload your bill and compare against UK supplier tariffs.",
+  title: "Voltly — Upload your bill",
+  description: "Upload → Extract → Compare",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
