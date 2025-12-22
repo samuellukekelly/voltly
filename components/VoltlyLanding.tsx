@@ -685,24 +685,38 @@ export default function VoltlyLanding() {
     No suppliers found for region {regionCode}.
   </div>
 ) : (
-  providerQuotes.map(({ p, annual, delta }) => {
-                              const active = selectedProvider?.name === p.name;
-                              const d = deltaLabel(delta);
+  providerQuotes.map((row) => {
+                              const active = selectedProvider?.providerId === row.providerId;
+                              const d = deltaLabel(row.delta);
                               return (
                                 <button
-                                  key={p.name}
-                                  onClick={() => setSelectedProvider(p)}
+                                  key={row.id}
+                                  onClick={() =>
+                                    setSelectedProvider({
+                                      providerId: row.providerId,
+                                      providerCode: row.providerCode,
+                                      provider: row.provider,
+                                      dayP: row.dayP,
+                                      nightP: row.nightP,
+                                      standingPPerDay: row.standingPPerDay,
+                                      tariffName: row.tariffName,
+                                      tariffId: row.tariffId,
+                                      estimatedAnnual: row.estimatedAnnual,
+                                    })
+                                  }
                                   className={[
-                                    "w-full rounded-xl border px-3 py-2 text-left transition",
-                                    active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:bg-slate-50",
+                                    "w-full rounded-2xl border p-4 text-left transition",
+                                    active
+                                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                      : "border-slate-200 bg-white hover:bg-slate-50",
                                   ].join(" ")}
                                 >
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div className="text-sm font-semibold">{p.name}</div>
-                                    <div className="flex items-center gap-2">
-                                      <span
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-sm font-semibold">{row.provider}</div>
+                                      <div
                                         className={[
-                                          "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                                          "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
                                           d.kind === "good"
                                             ? active
                                               ? "bg-emerald-500/20 text-white"
@@ -717,17 +731,31 @@ export default function VoltlyLanding() {
                                         ].join(" ")}
                                       >
                                         {d.label}
-                                      </span>
-                                      <div className={["text-sm font-semibold", active ? "text-white" : "text-slate-900"].join(" ")}>{formatGBP(annual)}</div>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-right">
+                                      <div className="text-xs text-slate-500">Est. annual</div>
+                                      <div className="text-sm font-semibold">
+                                        {formatGBP(row.estimatedAnnual)}
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className={["mt-0.5 text-xs", active ? "text-white/80" : "text-slate-500"].join(" ")}>
-                                    Day {formatPence(p.dayP)} • Night {formatPence(p.nightP)} • Standing {formatPence(p.standingPPerDay)}/day
+
+                                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                                    <div className={active ? "text-white/80" : "text-slate-600"}>
+                                      Unit: {formatPence(row.dayP)}
+                                    </div>
+                                    <div className={active ? "text-white/80" : "text-slate-600"}>
+                                      Standing: {formatPence(row.standingPPerDay)}/day
+                                    </div>
+                                    <div className={active ? "text-white/80" : "text-slate-600"}>
+                                      Tariff: {row.tariffName}
+                                    </div>
                                   </div>
                                 </button>
                               );
-                            })
-)}
+                            })}
                           </div>
                         )}
                       </div>
