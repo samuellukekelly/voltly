@@ -217,7 +217,7 @@ export default function VoltlyLanding() {
         const text = await extractPdfText(f);
         const cleaned = text.replace(/\s+/g, " ").trim();
         if (cleaned.length < 200) {
-          setErr("This PDF looks like a scan (no selectable text). This demo can only extract from text-based PDFs. Add OCR for scanned bills.");
+          setErr("This PDF looks like a scan (no selectable text). Voltly currently extracts from text-based PDFs. For scanned bills, OCR support is required.");
           return;
         }
 
@@ -225,7 +225,7 @@ export default function VoltlyLanding() {
         setExtracted(parsed);
         setOpen(true);
       } else if (isImage) {
-        setErr("Image upload detected. This demo extracts text from text-based PDFs only. For photos/scans, add OCR (backend).");
+        setErr("Image upload detected. Voltly currently extracts from text-based PDFs only. For photos/scans, OCR support is required.");
       } else {
         setErr("Unsupported file type. Please upload a PDF bill.");
       }
@@ -520,7 +520,7 @@ export default function VoltlyLanding() {
                     Selected: <span className="font-medium text-slate-700">{filename}</span>
                   </span>
                 ) : (
-                  <span>Tip: If your PDF is scanned, you’ll need OCR (we can add this later).</span>
+                  <span>Tip: Text-based PDFs work best. If your bill is a scan/photo PDF, OCR support is required.</span>
                 )}
               </div>
 
@@ -529,7 +529,7 @@ export default function VoltlyLanding() {
               {extracted && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                   <span>
-                    Extracted details ready. <span className="font-medium">Open the popout</span> to review & compare.
+                    Extracted details ready. <span className="font-medium">Open the modal</span> to review & compare.
                   </span>
                   <button onClick={() => setOpen(true)} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-600">
                     View extraction
@@ -561,9 +561,9 @@ export default function VoltlyLanding() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
             <div className="text-sm font-semibold text-slate-900">Privacy-first by design</div>
             <ul className="mt-3 list-disc space-y-2 pl-5">
-              <li>This demo processes PDF text in your browser. No files are uploaded to a server.</li>
-              <li>In production, scanned bills would use OCR and auto-delete uploaded files after a short retention period.</li>
-              <li>Tariff data comes from your Supabase tables/views.</li>
+              <li>Voltly processes PDF text in your browser. Your bill file is not uploaded to a server during extraction.</li>
+              <li>If you upload a scanned bill (no selectable text), OCR support is required to read it reliably.</li>
+              <li>Tariff data is pulled from our Supabase-backed tariff database for your region.</li>
             </ul>
           </div>
         </section>
@@ -571,28 +571,32 @@ export default function VoltlyLanding() {
 
       {/* Modal */}
       {open && (
-        <div className="fixed inset-0 z-50 bg-black/40 p-4">
-          <div className="mx-auto flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            {/* header */}
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
-              <div>
-                <div className="text-lg font-semibold">Extracted bill details</div>
-                <div className="mt-1 text-sm text-slate-500">
-                  Review your numbers, then pick a supplier on the right to compare.
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
+          <div className="mx-auto my-6 w-full max-w-6xl">
+            <div className="h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl flex flex-col">
+              {/* header */}
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5">
+                <div>
+                  <div className="text-lg font-semibold">Extracted bill details</div>
+                  <div className="mt-1 text-sm text-slate-500">Review the extracted values, then compare against tariffs in your region.</div>
                 </div>
+                <button
+                  className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
               </div>
-              <button className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700" onClick={() => setOpen(false)} aria-label="Close">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  <path d="M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
 
-            {/* content */}
-            <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-2">
-              {/* left scroll */}
-              <div className="min-h-0 overflow-y-auto p-5">
+              {/* content */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="grid h-full min-h-0 md:grid-cols-[1fr_400px]">
+                  {/* left */}
+                  <div className="min-h-0 overflow-y-auto p-5">
                 {!extracted ? (
                   <div className="text-sm text-slate-600">No extraction available yet. Upload a PDF first.</div>
                 ) : (
@@ -673,17 +677,17 @@ export default function VoltlyLanding() {
                     ) : null}
 
                     <details className="rounded-2xl border border-slate-200 p-4">
-                      <summary className="cursor-pointer text-sm font-semibold">Raw text sample (debug)</summary>
+                      <summary className="cursor-pointer text-sm font-semibold">Technical details</summary>
                       <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
                         {extracted.rawTextSample}
                       </pre>
                     </details>
                   </div>
                 )}
-              </div>
+                  </div>
 
-              {/* right scroll */}
-              <div className="min-h-0 border-t border-slate-200 bg-slate-50/40 p-5 lg:border-l lg:border-t-0">
+                  {/* right */}
+                  <div className="min-h-0 overflow-y-auto border-t border-slate-200 bg-slate-50/40 p-5 md:border-l md:border-t-0">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold">Compare against</div>
@@ -705,7 +709,7 @@ export default function VoltlyLanding() {
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{providersError}</div>
                   ) : providerSummaries.length === 0 ? (
                     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                      No supplier tariffs found for region {regionCode}. Add rows to tariff_rates (or the view) and try again.
+                      No supplier tariffs are currently available for region {regionCode}. Please try again later.
                     </div>
                   ) : (
                     <div className="grid gap-3">
@@ -836,14 +840,9 @@ export default function VoltlyLanding() {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* footer */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
-              <div className="text-xs text-slate-500">Tip: On small screens, scroll inside each panel.</div>
-              <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800" onClick={() => setOpen(false)}>
-                Done
-              </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
