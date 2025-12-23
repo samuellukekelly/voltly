@@ -336,7 +336,7 @@ function parseVoltlyFromText(text: string): Extracted {
   };
 }
 
-async function extractPdfText(file: File): Promise<string> {
+async function loadPdfDoc(file: File): Promise<any> {
   const arrayBuffer = await file.arrayBuffer();
 
   // Dynamic import to keep server build happy.
@@ -348,7 +348,10 @@ async function extractPdfText(file: File): Promise<string> {
 
   const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;
+  return pdf;
+}
 
+async function extractTextFromPdfDoc(pdf: any): Promise<string> {
   let fullText = "";
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
@@ -356,10 +359,75 @@ async function extractPdfText(file: File): Promise<string> {
     const strings = (content.items || [])
       .map((it: any) => (typeof it.str === "string" ? it.str : ""))
       .filter(Boolean);
-    fullText += strings.join(" ") + "\n";
+    fullText += strings.join(" ") + "
+";
   }
   return fullText;
 }
+
+async function ocrTextFromPdfDoc(pdf: any, pageIndices: number[]): Promise<string> {
+  // Client-side OCR fallback (only used when text parsing fails).
+  // Note: keep this dynamic so it doesn't bloat the initial bundle.
+  const { createWorker } = await import("tesseract.js");
+
+  const worker = await createWorker({
+    logger: () => {
+      // no-op (could be wired to UI progress later)
+    },
+  });
+
+  try {
+    await worker.loadLanguage("eng");
+    await worker.initialize("eng");
+
+    let out = "";
+    for (const pageIndex of pageIndices) {
+      const pageNum = pageIndex + 1;
+      if (pageNum < 1 || pageNum > pdf.numPages) continue;
+
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 2 });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const res = await worker.recognize(dataUrl);
+      out += (res?.data?.text || "") + "
+";
+    }
+
+    return out;
+  } finally {
+    try {
+      await worker.terminate();
+    } catch {
+      // ignore
+    }
+  }
+
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+}
+
+async function extractPdfText(file: File): Promise<string> {
+  const pdf = await loadPdfDoc(file);
+  return extractTextFromPdfDoc(pdf);
+}
+
 
 function formatGBP(g?: number | null) {
   if (g == null || !Number.isFinite(g)) return "—";
@@ -449,18 +517,61 @@ export default function VoltlyLanding() {
     setBusy(true);
     try {
       if (isPdf) {
-        const text = await extractPdfText(f);
-        const cleaned = text.replace(/\s+/g, " ").trim();
-        if (cleaned.length < 200) {
-          setErr("This PDF looks like a scan (no selectable text). Voltly currently extracts from text-based PDFs. For scanned bills, OCR support is required.");
-          return;
+        const pdf = await loadPdfDoc(f);
+
+        // 1) Try normal (selectable text) extraction first.
+        let text = await extractTextFromPdfDoc(pdf);
+        let parsed = parseVoltlyFromText(text);
+
+        // 2) OCR fallback if consumption (kWh) didn't come through (common when tables are fragmented).
+        const missingConsumption =
+          parsed.electricDayKwh == null &&
+          parsed.electricNightKwh == null &&
+          parsed.electricTotalKwh == null &&
+          parsed.gasTotalKwh == null;
+
+        const looksEmpty = text.replace(/\s+/g, " ").trim().length < 200;
+
+        if (missingConsumption || looksEmpty) {
+          const maxPages = Math.min(3, pdf.numPages);
+          const pageIndices = Array.from({ length: maxPages }, (_, i) => i);
+          const ocrText = await ocrTextFromPdfDoc(pdf, pageIndices);
+
+          if (ocrText && ocrText.trim().length > 0) {
+            text = text + "\n" + ocrText;
+            parsed = parseVoltlyFromText(text);
+          }
         }
 
-        const parsed = parseVoltlyFromText(text);
         setExtracted(parsed);
         setOpen(true);
       } else if (isImage) {
-        setErr("Image upload detected. Voltly currently extracts from text-based PDFs only. For photos/scans, OCR support is required.");
+        // OCR fallback for photos/scans (best effort)
+        const dataUrl = await fileToDataUrl(f);
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker({ logger: () => {} });
+
+        try {
+          await worker.loadLanguage("eng");
+          await worker.initialize("eng");
+          const res = await worker.recognize(dataUrl);
+          const ocrText = (res?.data?.text || "").trim();
+
+          if (!ocrText) {
+            setErr("I couldn’t extract any readable text from that image. Please try a clearer photo or upload the original PDF.");
+            return;
+          }
+
+          const parsed = parseVoltlyFromText(ocrText);
+          setExtracted(parsed);
+          setOpen(true);
+        } finally {
+          try {
+            await worker.terminate();
+          } catch {
+            // ignore
+          }
+        }
       } else {
         setErr("Unsupported file type. Please upload a PDF bill.");
       }
