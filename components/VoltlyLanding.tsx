@@ -232,8 +232,8 @@ function parseVoltlyFromText(text: string): Extracted {
 // Unlabeled table rows often get re-ordered by PDF text extraction.
 // Support BOTH: "8.10p/kWh 660.4 kWh" and "660.4 kWh 8.10p/kWh".
 const ROW_RE = new RegExp(
-  `(?:${NUM}\s*p\s*(?:\/\s*kWh|per\s*kWh)[\s\S]{0,20}?${NUM}\s*kWh)|` +
-    `(?:${NUM}\s*kWh[\s\S]{0,20}?${NUM}\s*p\s*(?:\/\s*kWh|per\s*kWh))`,
+  `(?:${NUM}\\s*p\\s*(?:\\/\\s*kWh|per\\s*kWh)[\\s\\S]{0,40}?${NUM}\\s*kWh)|` +
+    `(?:${NUM}\\s*kWh[\\s\\S]{0,40}?${NUM}\\s*p\\s*(?:\\/\\s*kWh|per\\s*kWh))`,
   "gi"
 );
 
