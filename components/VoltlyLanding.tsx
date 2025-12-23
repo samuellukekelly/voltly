@@ -484,6 +484,7 @@ export default function VoltlyLanding() {
 
   const [open, setOpen] = useState(false);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
+  const [usedOcrFallback, setUsedOcrFallback] = useState(false);
 
   // Supabase compare state
   const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
@@ -498,6 +499,7 @@ export default function VoltlyLanding() {
     setErr(null);
     setFilename(f?.name ?? null);
     setExtracted(null);
+    setUsedOcrFallback(false);
 
     if (!f) return;
 
@@ -530,6 +532,7 @@ export default function VoltlyLanding() {
           if (ocrText && ocrText.trim().length > 0) {
             text = text + "\n" + ocrText;
             parsed = parseVoltlyFromText(text);
+            setUsedOcrFallback(true);
           }
         }
 
@@ -547,6 +550,8 @@ export default function VoltlyLanding() {
             setErr("I couldn’t extract any readable text from that image. Please try a clearer photo or upload the original PDF.");
             return;
           }
+
+          setUsedOcrFallback(true);
 
           const parsed = parseVoltlyFromText(ocrText);
           setExtracted(parsed);
@@ -868,7 +873,11 @@ return compareRows.map((r) => {
               {extracted && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                   <span>
-                    Extracted details ready. <span className="font-medium">Open the modal</span> to review & compare.
+                    Extracted details ready. {usedOcrFallback && (
+                      <span className="ml-2 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-300">
+                        OCR
+                      </span>
+                    )} <span className="font-medium">Open the modal</span> to review & compare.
                   </span>
                   <button onClick={() => setOpen(true)} className="rounded-lg bg-emerald-700 px-3 py-1.5 font-medium text-white hover:bg-emerald-600">
                     View extraction
@@ -918,6 +927,18 @@ return compareRows.map((r) => {
                 <div>
                   <div className="text-lg font-semibold">Extracted bill details</div>
                   <div className="mt-1 text-sm text-slate-500">Review the extracted values, then compare against tariffs in your region.</div>
+
+                  {usedOcrFallback && (
+                    <div className="mt-3">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900">
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        OCR used — figures may be less accurate
+                      </div>
+                      <p className="mt-2 text-xs text-amber-900/80">
+                        We used OCR because the PDF table was difficult to read reliably. Please double-check the kWh and rates.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <button
                   className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
