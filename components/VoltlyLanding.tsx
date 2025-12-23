@@ -219,7 +219,7 @@ function parseVoltlyFromText(text: string): Extracted {
     };
 
     // Labeled formats (day/night/off-peak)
-    for (const m of t.matchAll(new RegExp(`\\b(Day|Night|Off[-\\s]?peak|Peak)\\b[\\s\\S]{0,60}?${NUM}\\s*p(?:\\s*per\\s*kWh)?[\\s\\S]{0,60}?${NUM}\\s*kWh`, "gi"))) {
+    for (const m of t.matchAll(new RegExp(`\\b(Day|Night|Off[-\\s]?peak|Peak)\\b[\\s\\S]{0,60}?${NUM}\\s*p\\s*(?:\\/\\s*kWh|per\\s*kWh)?[\\s\\S]{0,60}?${NUM}\\s*kWh`, "gi"))) {
       const rawLabel = (m[1] || "").toLowerCase();
       const label = rawLabel.includes("night") || rawLabel.includes("off") ? "night" : rawLabel.includes("day") || rawLabel.includes("peak") ? "day" : undefined;
       const rateP = numFromMatch([m[2]]);
@@ -228,7 +228,7 @@ function parseVoltlyFromText(text: string): Extracted {
     }
 
     // Unlabeled "rate then kWh" pairs; try to infer label from nearby words.
-    for (const m of t.matchAll(new RegExp(`${NUM}\\s*p(?:\\s*per\\s*kWh)?[\\s\\S]{0,40}?${NUM}\\s*kWh`, "gi"))) {
+    for (const m of t.matchAll(new RegExp(`${NUM}\\s*p\\s*(?:\\/\\s*kWh|per\\s*kWh)?[\\s\\S]{0,60}?${NUM}\\s*kWh`, "gi"))) {
       const rateP = numFromMatch([m[1]]);
       const kwh = numFromMatch([m[2]]);
       const aroundStart = Math.max(0, m.index! - 30);
