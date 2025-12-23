@@ -369,12 +369,7 @@ async function ocrTextFromPdfDoc(pdf: any, pageIndices: number[]): Promise<strin
   // Note: keep this dynamic so it doesn't bloat the initial bundle.
   const { createWorker } = await import("tesseract.js");
 
-  const worker = await createWorker({
-    logger: () => {
-      // no-op (could be wired to UI progress later)
-    },
-  });
-
+  const worker = await createWorker("eng");
   try {
     await worker.loadLanguage("eng");
     await worker.initialize("eng");
@@ -547,8 +542,7 @@ export default function VoltlyLanding() {
         // OCR fallback for photos/scans (best effort)
         const dataUrl = await fileToDataUrl(f);
         const { createWorker } = await import("tesseract.js");
-        const worker = await createWorker({ logger: () => {} });
-
+        const worker = await createWorker("eng");
         try {
           await worker.loadLanguage("eng");
           await worker.initialize("eng");
