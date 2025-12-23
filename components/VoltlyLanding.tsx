@@ -359,8 +359,7 @@ async function extractTextFromPdfDoc(pdf: any): Promise<string> {
     const strings = (content.items || [])
       .map((it: any) => (typeof it.str === "string" ? it.str : ""))
       .filter(Boolean);
-    fullText += strings.join(" ") + "
-";
+    fullText += strings.join(" ") + "\n";
   }
   return fullText;
 }
@@ -399,8 +398,7 @@ async function ocrTextFromPdfDoc(pdf: any, pageIndices: number[]): Promise<strin
 
       const dataUrl = canvas.toDataURL("image/png");
       const res = await worker.recognize(dataUrl);
-      out += (res?.data?.text || "") + "
-";
+      out += (res?.data?.text || "") + "\n";
     }
 
     return out;
