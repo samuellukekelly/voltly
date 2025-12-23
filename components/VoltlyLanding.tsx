@@ -370,11 +370,7 @@ async function ocrTextFromPdfDoc(pdf: any, pageIndices: number[]): Promise<strin
   const { createWorker } = await import("tesseract.js");
 
   const worker = await createWorker("eng");
-  try {
-    await worker.loadLanguage("eng");
-    await worker.initialize("eng");
-
-    let out = "";
+  try {    let out = "";
     for (const pageIndex of pageIndices) {
       const pageNum = pageIndex + 1;
       if (pageNum < 1 || pageNum > pdf.numPages) continue;
@@ -543,10 +539,7 @@ export default function VoltlyLanding() {
         const dataUrl = await fileToDataUrl(f);
         const { createWorker } = await import("tesseract.js");
         const worker = await createWorker("eng");
-        try {
-          await worker.loadLanguage("eng");
-          await worker.initialize("eng");
-          const res = await worker.recognize(dataUrl);
+        try {          const res = await worker.recognize(dataUrl);
           const ocrText = (res?.data?.text || "").trim();
 
           if (!ocrText) {
