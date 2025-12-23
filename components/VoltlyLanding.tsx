@@ -402,6 +402,8 @@ async function ocrTextFromPdfDoc(pdf: any, pageIndices: number[]): Promise<strin
   }
 
 
+}
+
 async function fileToDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -409,7 +411,6 @@ async function fileToDataUrl(file: File): Promise<string> {
     reader.onload = () => resolve(String(reader.result || ""));
     reader.readAsDataURL(file);
   });
-}
 }
 
 async function extractPdfText(file: File): Promise<string> {
