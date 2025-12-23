@@ -29,6 +29,7 @@ postcodeAlpha?: string; // region code alpha (A–P) e.g. "M"
 
   notes: string[];
   rawTextSample?: string;
+  rawTextLen?: number;
 };
 
 type CompareRow = {
@@ -227,18 +228,32 @@ function parseVoltlyFromText(text: string): Extracted {
       pushRow(label as any, rateP ?? undefined, kwh ?? undefined);
     }
 
-    // Unlabeled "rate then kWh" pairs; try to infer label from nearby words.
-    for (const m of t.matchAll(new RegExp(`${NUM}\\s*p(?:\\s*per\\s*kWh)?[\\s\\S]{0,40}?${NUM}\\s*kWh`, "gi"))) {
-      const rateP = numFromMatch([m[1]]);
-      const kwh = numFromMatch([m[2]]);
-      const aroundStart = Math.max(0, m.index! - 30);
-      const aroundEnd = Math.min(t.length, m.index! + (m[0]?.length || 0) + 30);
-      const around = t.slice(aroundStart, aroundEnd).toLowerCase();
-      let label: "day" | "night" | undefined = undefined;
-      if (around.includes("night") || around.includes("off-peak") || around.includes("off peak")) label = "night";
-      if (around.includes("day") || around.includes("peak")) label = "day";
-      pushRow(label, rateP ?? undefined, kwh ?? undefined);
-    }
+    
+// Unlabeled table rows often get re-ordered by PDF text extraction.
+// Support BOTH: "8.10p/kWh 660.4 kWh" and "660.4 kWh 8.10p/kWh".
+const ROW_RE = new RegExp(
+  `(?:${NUM}\s*p\s*(?:\/\s*kWh|per\s*kWh)[\s\S]{0,20}?${NUM}\s*kWh)|` +
+    `(?:${NUM}\s*kWh[\s\S]{0,20}?${NUM}\s*p\s*(?:\/\s*kWh|per\s*kWh))`,
+  "gi"
+);
+
+for (const m of t.matchAll(ROW_RE)) {
+  // Captures come from either alternative; pick the populated ones.
+  const rateP = numFromMatch([m[1] ?? m[4]]);
+  const kwh = numFromMatch([m[2] ?? m[3]]);
+  if (!rateP || !kwh) continue;
+
+  const aroundStart = Math.max(0, (m.index ?? 0) - 40);
+  const aroundEnd = Math.min(t.length, (m.index ?? 0) + (m[0]?.length || 0) + 40);
+  const around = t.slice(aroundStart, aroundEnd).toLowerCase();
+
+  let label: "day" | "night" | undefined = undefined;
+  if (around.includes("night") || around.includes("off-peak") || around.includes("off peak")) label = "night";
+  if (around.includes("day") || around.includes("peak")) label = "day";
+
+  pushRow(label, rateP ?? undefined, kwh ?? undefined);
+}
+
 
     const matchByRate = (targetRateP?: number | null, preferredLabel?: "day" | "night") => {
       if (!targetRateP) return null;
@@ -333,6 +348,7 @@ function parseVoltlyFromText(text: string): Extracted {
     electricityEstimatedAnnualGBP,
     notes,
     rawTextSample: clampText(t, 900),
+    rawTextLen: t.length,
   };
 }
 
@@ -1154,7 +1170,7 @@ return compareRows.map((r) => {
                     <details className="rounded-2xl border border-slate-200 p-4">
                       <summary className="cursor-pointer text-sm font-semibold">Technical details</summary>
                       <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-                        {extracted.rawTextSample}
+                        {extracted.rawTextLen ? `Extracted text length: ${extracted.rawTextLen.toLocaleString()} chars\n\n` : ""}{extracted.rawTextSample}
                       </pre>
                     </details>
                   </div>
